@@ -1,0 +1,223 @@
+
+import React, { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import PriceWatcher from './components/PriceWatcher';
+import FarmFlow from './components/FarmFlow';
+import BuyersConnect from './components/BuyersConnect';
+import TechStack from './components/TechStack';
+import ImplementationGuide from './components/ImplementationGuide';
+import { AppView, FarmerNotification, Language } from './types';
+import { Bell, User, LayoutGrid, X, AlertTriangle, ShieldAlert, ChevronRight, Settings, Search, Languages } from 'lucide-react';
+
+const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+  const [language, setLanguage] = useState<Language>('en');
+  const [notifications, setNotifications] = useState<FarmerNotification[]>([
+    {
+      id: '1',
+      title: 'Moisture Restoration',
+      message: 'Plot 7 moisture normalized. Auto-irrigation sequence completed.',
+      severity: 'info',
+      timestamp: new Date(),
+      read: false,
+      category: 'soil'
+    },
+    {
+      id: '2',
+      title: 'Precision Tip',
+      message: 'UV levels rising. Adjusting irrigation timing for reduced transpiration.',
+      severity: 'info',
+      timestamp: new Date(Date.now() - 3600000),
+      read: false,
+      category: 'pesticide'
+    }
+  ]);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [toast, setToast] = useState<FarmerNotification | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const newAlert: FarmerNotification = {
+        id: Date.now().toString(),
+        title: 'Market Opportunity',
+        message: 'Soybean prices spiked 4.2% in local mandi. Review selling strategy.',
+        severity: 'info',
+        timestamp: new Date(),
+        read: false,
+        category: 'market'
+      };
+      setNotifications(prev => [newAlert, ...prev]);
+      setToast(newAlert);
+      setTimeout(() => setToast(null), 8000);
+    }, 12000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const markAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
+  const renderView = () => {
+    switch (currentView) {
+      case AppView.DASHBOARD: return <Dashboard />;
+      case AppView.PRICE_WATCHER: return <PriceWatcher />;
+      case AppView.FARM_FLOW: return <FarmFlow language={language} />;
+      case AppView.BUYERS_CONNECT: return <BuyersConnect />;
+      case AppView.TECH_STACK: return <TechStack />;
+      case AppView.IMPLEMENTATION: return <ImplementationGuide />;
+      default: return <Dashboard />;
+    }
+  };
+
+  const languages: { code: Language, label: string }[] = [
+    { code: 'en', label: 'English' },
+    { code: 'hi', label: 'हिंदी' },
+    { code: 'mr', label: 'मराठी' },
+    { code: 'pa', label: 'ਪੰਜਾਬੀ' }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900">
+      <Sidebar currentView={currentView} setView={setCurrentView} />
+      
+      <main className="pl-64 min-h-screen transition-all duration-300">
+        <header className="h-20 bg-white/70 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            <div className="bg-slate-100 p-2 rounded-xl text-slate-500">
+               <LayoutGrid size={18} />
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-bold text-slate-900 capitalize tracking-tight">
+                {currentView.replace('_', ' ').toLowerCase()}
+              </span>
+              <ChevronRight size={14} className="text-slate-300" />
+              <span className="text-slate-400 font-medium">Global AI Hub</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+              <Languages size={14} className="ml-3 text-slate-400" />
+              <select 
+                className="bg-transparent border-none outline-none text-[10px] font-black uppercase tracking-widest px-2 py-1.5 cursor-pointer appearance-none"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+              >
+                {languages.map(lang => (
+                  <option key={lang.code} value={lang.code}>{lang.label}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-2 pr-6 border-r border-slate-100">
+              <button className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-400 hover:text-slate-600">
+                 <Settings size={20} />
+              </button>
+              <div className="relative cursor-pointer group" onClick={() => setShowNotificationCenter(!showNotificationCenter)}>
+                <div className={`p-2.5 rounded-xl transition-all ${showNotificationCenter ? 'bg-emerald-50 text-emerald-600' : 'hover:bg-slate-50 text-slate-400 hover:text-emerald-600'}`}>
+                  <Bell size={20} />
+                </div>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-emerald-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-black border-2 border-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 group cursor-pointer">
+              <div className="text-right">
+                <p className="text-sm font-black text-slate-800 tracking-tight group-hover:text-emerald-600 transition-colors">Krishan F.</p>
+                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded">Regional Lead</p>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <User size={22} />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-10 max-w-7xl mx-auto">
+          {renderView()}
+        </div>
+      </main>
+
+      {/* Push Notification Toast */}
+      {toast && (
+        <div className="fixed bottom-10 right-10 z-[100] animate-bounce-in w-96">
+          <div className="p-5 rounded-[2rem] shadow-2xl bg-slate-900 text-white border border-slate-800 flex gap-4 ring-1 ring-white/10">
+            <div className="shrink-0 p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/30">
+              <ShieldAlert size={24} />
+            </div>
+            <div className="flex-1">
+              <div className="flex justify-between items-start mb-1">
+                <h4 className="font-black text-white text-sm tracking-tight">{toast.title}</h4>
+                <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 font-medium leading-relaxed">{toast.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Center */}
+      {showNotificationCenter && (
+        <>
+          <div className="fixed inset-0 bg-slate-900/60 z-[50] backdrop-blur-md transition-all duration-500" onClick={() => setShowNotificationCenter(false)} />
+          <div className="fixed right-4 top-4 bottom-4 w-[420px] bg-white z-[60] shadow-2xl rounded-[3rem] animate-slide-in p-8 flex flex-col border border-slate-100">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">System Logs</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Satellite + Sensor Stream</p>
+              </div>
+              <button onClick={() => setShowNotificationCenter(false)} className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+              {notifications.map(n => (
+                <div key={n.id} onClick={() => markAsRead(n.id)} className={`p-5 rounded-[2rem] border transition-all cursor-pointer group ${n.read ? 'bg-slate-50 border-transparent opacity-60' : 'bg-white border-slate-100 shadow-sm hover:shadow-md'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`p-1.5 rounded-lg ${n.severity === 'critical' ? 'bg-red-100 text-red-500' : 'bg-emerald-100 text-emerald-600'}`}>
+                      {n.severity === 'critical' ? <AlertTriangle size={14} /> : <ShieldAlert size={14} />}
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{n.category}</span>
+                  </div>
+                  <h5 className="font-black text-slate-800 text-sm mb-1 tracking-tight">{n.title}</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed font-medium">{n.message}</p>
+                  <div className="flex justify-between items-center mt-4">
+                    <p className="text-[10px] text-slate-400 font-bold">{n.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes bounceIn { 
+          0% { opacity: 0; transform: translateY(100px) scale(0.9); } 
+          60% { opacity: 1; transform: translateY(-10px) scale(1.02); } 
+          100% { transform: translateY(0) scale(1); } 
+        }
+        .animate-fadeIn { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-slide-in { animation: slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-bounce-in { animation: bounceIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
