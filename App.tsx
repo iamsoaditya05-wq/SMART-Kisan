@@ -8,11 +8,16 @@ import BuyersConnect from './components/BuyersConnect';
 import TechStack from './components/TechStack';
 import ImplementationGuide from './components/ImplementationGuide';
 import { AppView, FarmerNotification, Language } from './types';
-import { Bell, User, LayoutGrid, X, AlertTriangle, ShieldAlert, ChevronRight, Settings, Search, Languages } from 'lucide-react';
+import { 
+  Bell, User, LayoutGrid, X, AlertTriangle, ShieldAlert, ChevronRight, Settings, Search, Languages, Menu,
+  Droplets, LayoutDashboard, TrendingUp, ShoppingCart, Cpu, Workflow 
+} from 'lucide-react';
+import { translations } from './utils/translations';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [language, setLanguage] = useState<Language>('en');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<FarmerNotification[]>([
     {
       id: '1',
@@ -35,6 +40,8 @@ const App: React.FC = () => {
   ]);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [toast, setToast] = useState<FarmerNotification | null>(null);
+
+  const t = translations[language] || translations.en;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -62,13 +69,13 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case AppView.DASHBOARD: return <Dashboard />;
+      case AppView.DASHBOARD: return <Dashboard language={language} />;
       case AppView.PRICE_WATCHER: return <PriceWatcher />;
       case AppView.FARM_FLOW: return <FarmFlow language={language} />;
       case AppView.BUYERS_CONNECT: return <BuyersConnect />;
       case AppView.TECH_STACK: return <TechStack />;
       case AppView.IMPLEMENTATION: return <ImplementationGuide />;
-      default: return <Dashboard />;
+      default: return <Dashboard language={language} />;
     }
   };
 
@@ -80,29 +87,37 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900">
-      <Sidebar currentView={currentView} setView={setCurrentView} />
+    <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900 overflow-x-hidden">
+      <Sidebar currentView={currentView} setView={setCurrentView} language={language} />
       
-      <main className="pl-64 min-h-screen transition-all duration-300">
-        <header className="h-20 bg-white/70 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
+      <main className="lg:pl-64 min-h-screen transition-all duration-300">
+        <header className="h-20 bg-white/70 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-4 lg:px-10 sticky top-0 z-40">
           <div className="flex items-center gap-3">
-            <div className="bg-slate-100 p-2 rounded-xl text-slate-500">
-               <LayoutGrid size={18} />
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-bold text-slate-900 capitalize tracking-tight">
-                {currentView.replace('_', ' ').toLowerCase()}
-              </span>
-              <ChevronRight size={14} className="text-slate-300" />
-              <span className="text-slate-400 font-medium">Global AI Hub</span>
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="bg-slate-100 p-2 rounded-xl text-slate-500">
+                 <LayoutGrid size={18} />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-bold text-slate-900 capitalize tracking-tight">
+                  {t[currentView.toLowerCase().replace('_', '')] || currentView.replace('_', ' ').toLowerCase()}
+                </span>
+                <ChevronRight size={14} className="text-slate-300" />
+                <span className="text-slate-400 font-medium">{t.searchHub}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 lg:gap-6">
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
-              <Languages size={14} className="ml-3 text-slate-400" />
+              <Languages size={14} className="ml-2 lg:ml-3 text-slate-400" />
               <select 
-                className="bg-transparent border-none outline-none text-[10px] font-black uppercase tracking-widest px-2 py-1.5 cursor-pointer appearance-none"
+                className="bg-transparent border-none outline-none text-[10px] font-black uppercase tracking-widest px-1 lg:px-2 py-1.5 cursor-pointer appearance-none"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as Language)}
               >
@@ -112,42 +127,83 @@ const App: React.FC = () => {
               </select>
             </div>
             
-            <div className="flex items-center gap-2 pr-6 border-r border-slate-100">
-              <button className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-400 hover:text-slate-600">
+            <div className="flex items-center gap-1 lg:gap-2 lg:pr-6 lg:border-r border-slate-100">
+              <button className="hidden sm:block p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-400 hover:text-slate-600">
                  <Settings size={20} />
               </button>
               <div className="relative cursor-pointer group" onClick={() => setShowNotificationCenter(!showNotificationCenter)}>
-                <div className={`p-2.5 rounded-xl transition-all ${showNotificationCenter ? 'bg-emerald-50 text-emerald-600' : 'hover:bg-slate-50 text-slate-400 hover:text-emerald-600'}`}>
+                <div className={`p-2 lg:p-2.5 rounded-xl transition-all ${showNotificationCenter ? 'bg-emerald-50 text-emerald-600' : 'hover:bg-slate-50 text-slate-400 hover:text-emerald-600'}`}>
+                  {/* Fixed invalid size prop and ensured the icon is scaled appropriately */}
                   <Bell size={20} />
                 </div>
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 bg-emerald-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-black border-2 border-white">
+                  <span className="absolute top-1 right-1 bg-emerald-500 text-white text-[9px] w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-full flex items-center justify-center font-black border-2 border-white">
                     {unreadCount}
                   </span>
                 )}
               </div>
             </div>
             
-            <div className="flex items-center gap-3 group cursor-pointer">
-              <div className="text-right">
+            <div className="flex items-center gap-2 lg:gap-3 group cursor-pointer ml-2">
+              <div className="text-right hidden sm:block">
                 <p className="text-sm font-black text-slate-800 tracking-tight group-hover:text-emerald-600 transition-colors">Krishan F.</p>
-                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded">Regional Lead</p>
+                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded">{t.regionalLead}</p>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 lg:w-11 lg:h-11 rounded-xl lg:rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                {/* Fixed invalid size prop */}
                 <User size={22} />
               </div>
             </div>
           </div>
         </header>
 
-        <div className="p-10 max-w-7xl mx-auto">
+        <div className="p-4 lg:p-10 max-w-7xl mx-auto">
           {renderView()}
         </div>
       </main>
 
+      {/* Mobile Sidebar */}
+      {isMobileMenuOpen && (
+        <>
+          <div className="fixed inset-0 bg-slate-900/60 z-[45] lg:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+          <div className="fixed inset-y-0 left-0 w-64 bg-emerald-950 z-[50] lg:hidden transform transition-transform duration-300 p-6 flex flex-col">
+             <div className="flex justify-between items-center mb-10">
+                <div className="flex items-center gap-2">
+                   {/* Fix: Droplets icon was missing import */}
+                   <Droplets className="text-emerald-500" />
+                   <h1 className="text-white font-black">SMART Kisan</h1>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="text-white">
+                   <X size={20} />
+                </button>
+             </div>
+             <nav className="flex-1 space-y-2">
+                {[
+                   { id: AppView.DASHBOARD, label: t.dashboard, icon: LayoutDashboard },
+                   { id: AppView.PRICE_WATCHER, label: t.market, icon: TrendingUp },
+                   { id: AppView.FARM_FLOW, label: t.precision, icon: Droplets },
+                   { id: AppView.BUYERS_CONNECT, label: t.trade, icon: ShoppingCart },
+                   { id: AppView.TECH_STACK, label: t.infrastructure, icon: Cpu },
+                   { id: AppView.IMPLEMENTATION, label: t.setup, icon: Workflow },
+                ].map(item => (
+                   <button
+                      key={item.id}
+                      /* Fix: setView was not defined in this scope, used setCurrentView instead */
+                      onClick={() => { setCurrentView(item.id); setIsMobileMenuOpen(false); }}
+                      className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${currentView === item.id ? 'bg-emerald-600 text-white' : 'text-emerald-200/60'}`}
+                   >
+                      <item.icon size={18} />
+                      <span className="font-bold text-sm">{item.label}</span>
+                   </button>
+                ))}
+             </nav>
+          </div>
+        </>
+      )}
+
       {/* Push Notification Toast */}
       {toast && (
-        <div className="fixed bottom-10 right-10 z-[100] animate-bounce-in w-96">
+        <div className="fixed bottom-4 right-4 lg:bottom-10 lg:right-10 z-[100] animate-bounce-in w-[calc(100%-2rem)] sm:w-96">
           <div className="p-5 rounded-[2rem] shadow-2xl bg-slate-900 text-white border border-slate-800 flex gap-4 ring-1 ring-white/10">
             <div className="shrink-0 p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/30">
               <ShieldAlert size={24} />
@@ -169,11 +225,11 @@ const App: React.FC = () => {
       {showNotificationCenter && (
         <>
           <div className="fixed inset-0 bg-slate-900/60 z-[50] backdrop-blur-md transition-all duration-500" onClick={() => setShowNotificationCenter(false)} />
-          <div className="fixed right-4 top-4 bottom-4 w-[420px] bg-white z-[60] shadow-2xl rounded-[3rem] animate-slide-in p-8 flex flex-col border border-slate-100">
+          <div className="fixed right-0 top-0 bottom-0 lg:right-4 lg:top-4 lg:bottom-4 w-full sm:w-[420px] bg-white z-[60] shadow-2xl lg:rounded-[3rem] animate-slide-in p-6 lg:p-8 flex flex-col border border-slate-100">
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight">System Logs</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Satellite + Sensor Stream</p>
+                <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight">{t.logs}</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{t.stream}</p>
               </div>
               <button onClick={() => setShowNotificationCenter(false)} className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl transition-colors">
                 <X size={20} />

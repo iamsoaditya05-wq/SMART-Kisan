@@ -9,25 +9,29 @@ import {
   Workflow,
   ShieldCheck
 } from 'lucide-react';
-import { AppView } from '../types';
+import { AppView, Language } from '../types';
+import { translations } from '../utils/translations';
 
 interface SidebarProps {
   currentView: AppView;
   setView: (view: AppView) => void;
+  language: Language;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, language }) => {
+  const t = translations[language] || translations.en;
+
   const menuItems = [
-    { id: AppView.DASHBOARD, label: 'Control Center', icon: LayoutDashboard },
-    { id: AppView.PRICE_WATCHER, label: 'Market Analytics', icon: TrendingUp },
-    { id: AppView.FARM_FLOW, label: 'Precision Ag', icon: Droplets },
-    { id: AppView.BUYERS_CONNECT, label: 'Trade Network', icon: ShoppingCart },
-    { id: AppView.TECH_STACK, label: 'Infrastructure', icon: Cpu },
-    { id: AppView.IMPLEMENTATION, label: 'System Setup', icon: Workflow },
+    { id: AppView.DASHBOARD, label: t.dashboard, icon: LayoutDashboard },
+    { id: AppView.PRICE_WATCHER, label: t.market, icon: TrendingUp },
+    { id: AppView.FARM_FLOW, label: t.precision, icon: Droplets },
+    { id: AppView.BUYERS_CONNECT, label: t.trade, icon: ShoppingCart },
+    { id: AppView.TECH_STACK, label: t.infrastructure, icon: Cpu },
+    { id: AppView.IMPLEMENTATION, label: t.setup, icon: Workflow },
   ];
 
   return (
-    <div className="w-64 bg-emerald-950 h-screen fixed left-0 top-0 text-white flex flex-col p-6 shadow-2xl z-20 border-r border-emerald-900/50">
+    <div className="w-64 bg-emerald-950 h-screen fixed left-0 top-0 text-white flex flex-col p-6 shadow-2xl z-20 border-r border-emerald-900/50 hidden lg:flex">
       <div className="flex items-center gap-3 mb-12 px-2">
         <div className="bg-emerald-500 p-2.5 rounded-xl shadow-lg shadow-emerald-500/20">
           <Droplets size={24} className="text-white" />
@@ -59,9 +63,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
         <div className="bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50">
           <div className="flex items-center gap-2 mb-2">
             <ShieldCheck size={14} className="text-emerald-500" />
-            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">System Status</span>
+            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{t.status}</span>
           </div>
-          <p className="text-xs font-semibold text-emerald-100">Global Network: Online</p>
+          <p className="text-xs font-semibold text-emerald-100">{t.online}</p>
           <div className="mt-2 w-full bg-emerald-950 h-1.5 rounded-full overflow-hidden">
             <div className="bg-emerald-500 h-full w-[98%] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
           </div>
