@@ -1,15 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Access variables via process.env which is pre-configured in this environment
-const supabaseUrl = (process.env as any).VITE_SUPABASE_URL;
-const supabaseAnonKey = (process.env as any).VITE_SUPABASE_ANON_KEY;
+// Specific project credentials provided by the user
+const supabaseUrl = 'https://nheyogmibaowjcmmrzuv.supabase.co';
+const supabaseAnonKey = 'sb_publishable_gfndxc0lwkrEwbVhMVhWzg_ILtuCATg';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase credentials missing. Check Environment Variables.");
-}
-
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder'
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

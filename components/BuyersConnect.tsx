@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { 
   ShoppingBag, Star, MapPin, CheckCircle2, ShieldCheck, CreditCard, ArrowRight, ArrowLeft,
-  ChevronRight, Package, FileText, BadgeCheck, Lock, QrCode, Fingerprint, FileCheck, ShieldAlert, Database
+  ChevronRight, Package, FileText, BadgeCheck, Lock, QrCode, Fingerprint, FileCheck, ShieldAlert, Database,
+  RefreshCw
 } from 'lucide-react';
 import { BuyerListing } from '../types';
 import { supabase } from '../lib/supabase';
@@ -40,19 +41,25 @@ const BuyersConnect: React.FC = () => {
     }
 
     setSaving(true);
+    // Sending all order fields to Supabase as requested
     const { error } = await supabase
       .from('contracts')
       .insert({
         buyer_name: selectedBuyer?.name,
+        buyer_id: selectedBuyer?.id,
+        buyer_type: selectedBuyer?.type,
         crop_type: formData.cropType,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.expectedPrice),
-        contract_hash: `0x${Math.random().toString(16).slice(2, 10)}...`
+        delivery_date: formData.deliveryDate,
+        contract_hash: `0x${Math.random().toString(16).slice(2, 10)}...`,
+        status: 'locked',
+        created_at: new Date().toISOString()
       });
 
     if (error) {
       console.error(error);
-      alert("Failed to sync with Supabase ledger.");
+      alert("Failed to sync with Supabase ledger. Ensure the 'contracts' table exists with appropriate columns.");
     } else {
       setWizardStep(4);
     }
@@ -72,35 +79,129 @@ const BuyersConnect: React.FC = () => {
                   selectedBuyer?.id === buyer.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white'
                 }`}
               >
-                <h4 className="font-bold flex items-center gap-2">{buyer.name} <CheckCircle2 size={14} className="text-blue-500"/></h4>
-                <p className="text-xs text-slate-500">{buyer.type}</p>
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-bold flex items-center gap-2">{buyer.name} <CheckCircle2 size={14} className="text-blue-500"/></h4>
+                  <div className="flex items-center gap-1 text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg">
+                    <Star size={10} fill="currentColor"/>
+                    <span className="text-[10px] font-black">{buyer.rating}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mb-2">{buyer.type}</p>
+                <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold">
+                  <MapPin size={10}/> {buyer.location}
+                </div>
               </div>
             ))}
           </div>
         );
       case 2:
         return (
-          <div className="max-w-xl mx-auto bg-white p-8 rounded-[2.5rem] border border-slate-100 animate-fadeIn space-y-4">
-             <input type="number" placeholder="Quantity" className="w-full p-4 bg-slate-50 rounded-2xl border-none" onChange={(e) => setFormData({...formData, quantity: e.target.value})}/>
-             <input type="number" placeholder="Price" className="w-full p-4 bg-slate-50 rounded-2xl border-none" onChange={(e) => setFormData({...formData, expectedPrice: e.target.value})}/>
+          <div className="max-w-xl mx-auto bg-white p-8 rounded-[2.5rem] border border-slate-100 animate-fadeIn space-y-6">
+             <div className="space-y-1">
+               <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Crop Selection</label>
+               <select 
+                 className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none appearance-none font-bold text-slate-700"
+                 value={formData.cropType}
+                 onChange={(e) => setFormData({...formData, cropType: e.target.value})}
+               >
+                 <option>Wheat</option>
+                 <option>Rice</option>
+                 <option>Corn</option>
+                 <option>Soybean</option>
+                 <option>Cotton</option>
+               </select>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Quantity (Quintals)</label>
+                 <input 
+                   type="number" 
+                   placeholder="0.00" 
+                   className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700" 
+                   value={formData.quantity}
+                   onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                 />
+               </div>
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Price / Quintal (₹)</label>
+                 <input 
+                   type="number" 
+                   placeholder="0.00" 
+                   className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700" 
+                   value={formData.expectedPrice}
+                   onChange={(e) => setFormData({...formData, expectedPrice: e.target.value})}
+                 />
+               </div>
+             </div>
+
+             <div className="space-y-1">
+               <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Requested Delivery Date</label>
+               <input 
+                 type="date" 
+                 className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700" 
+                 value={formData.deliveryDate}
+                 onChange={(e) => setFormData({...formData, deliveryDate: e.target.value})}
+               />
+             </div>
           </div>
         );
       case 3:
         return (
           <div className="max-w-2xl mx-auto space-y-6 animate-fadeIn">
-            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 space-y-6">
-              <div className="flex items-center gap-2 mb-4">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 space-y-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
                 <Database size={18} className="text-emerald-600" />
-                <span className="text-xs font-black uppercase text-emerald-600">Syncing with Supabase Ledger</span>
+                <span className="text-xs font-black uppercase text-emerald-600 tracking-widest">Immutable Cloud Ledger Sync</span>
               </div>
-              <input type="password" placeholder="Digital Signature PIN" className="w-full p-4 bg-slate-50 rounded-2xl border-none" value={digitalSignature} onChange={(e) => setDigitalSignature(e.target.value)}/>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" onChange={(e) => setIsAgreed(e.target.checked)}/> I agree to smart-locked payment.</label>
+              
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <h5 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-wider">Contract Summary</h5>
+                <div className="grid grid-cols-2 gap-y-4">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Buyer</p>
+                    <p className="text-sm font-black text-slate-800">{selectedBuyer?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Commodity</p>
+                    <p className="text-sm font-black text-slate-800">{formData.cropType}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Volume</p>
+                    <p className="text-sm font-black text-slate-800">{formData.quantity} Quintals</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Delivery</p>
+                    <p className="text-sm font-black text-slate-800">{formData.deliveryDate || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <input 
+                  type="password" 
+                  placeholder="Digital Signature PIN" 
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold" 
+                  value={digitalSignature} 
+                  onChange={(e) => setDigitalSignature(e.target.value)}
+                />
+                <label className="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    onChange={(e) => setIsAgreed(e.target.checked)}
+                  /> 
+                  I agree to smart-locked payment terms and data encryption.
+                </label>
+              </div>
+
               <button 
                 onClick={handleLockContract} 
                 disabled={saving}
-                className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+                className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-600/20 active:scale-95 disabled:opacity-50"
               >
-                {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Lock size={18} />}
+                {/* Added missing RefreshCw import */}
+                {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Lock size={20} />}
                 Lock Contract to Supabase
               </button>
             </div>
@@ -108,10 +209,18 @@ const BuyersConnect: React.FC = () => {
         );
       case 4:
         return (
-          <div className="text-center p-10 bg-white rounded-[3rem] border border-emerald-100 animate-bounce-in">
-             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40}/></div>
-             <h2 className="text-2xl font-bold mb-2">Supabase Sync Successful</h2>
-             <p className="text-slate-500">The contract is now immutable in your private cloud ledger.</p>
+          <div className="text-center p-12 bg-white rounded-[4rem] border border-emerald-100 animate-bounce-in shadow-xl max-w-lg mx-auto">
+             <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+               <CheckCircle2 size={48}/>
+             </div>
+             <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Supabase Sync Successful</h2>
+             <p className="text-slate-500 font-medium leading-relaxed">The contract record is now immutable in your private cloud ledger (Project: SMART KISAN).</p>
+             <button 
+               onClick={() => { setWizardStep(1); setSelectedBuyer(null); }}
+               className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all"
+             >
+               Start New Trade
+             </button>
           </div>
         );
       default: return null;
@@ -121,17 +230,41 @@ const BuyersConnect: React.FC = () => {
   return (
     <div className="space-y-8 animate-fadeIn pb-10">
       <div className="flex flex-col items-center justify-center mb-10">
-        <div className="flex gap-4">
+        <div className="flex gap-4 md:gap-8">
           {steps.map(s => (
-            <div key={s.id} className={`w-10 h-10 rounded-full flex items-center justify-center ${wizardStep >= s.id ? 'bg-emerald-600 text-white' : 'bg-slate-200'}`}><s.icon size={16}/></div>
+            <div key={s.id} className="flex flex-col items-center gap-2">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${wizardStep >= s.id ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-100 text-slate-400'}`}>
+                <s.icon size={20}/>
+              </div>
+              <span className={`text-[10px] font-black uppercase tracking-widest ${wizardStep >= s.id ? 'text-emerald-600' : 'text-slate-300'}`}>{s.label}</span>
+            </div>
           ))}
         </div>
       </div>
+      
       {renderStepContent()}
+      
       {wizardStep < 3 && (
-        <div className="flex justify-between max-w-2xl mx-auto mt-10">
-          <button onClick={() => setWizardStep(prev => prev - 1)} disabled={wizardStep === 1} className="px-6 py-2 text-slate-400">Back</button>
-          <button onClick={() => setWizardStep(prev => prev + 1)} className="px-10 py-3 bg-emerald-600 text-white rounded-2xl font-bold">Next</button>
+        <div className="flex justify-between max-w-2xl mx-auto mt-12 px-4">
+          <button 
+            onClick={() => setWizardStep(prev => prev - 1)} 
+            disabled={wizardStep === 1} 
+            className="flex items-center gap-2 px-6 py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors disabled:opacity-0"
+          >
+            <ArrowLeft size={18}/> Back
+          </button>
+          <button 
+            onClick={() => {
+              if (wizardStep === 1 && !selectedBuyer) {
+                alert("Please select a partner first.");
+                return;
+              }
+              setWizardStep(prev => prev + 1);
+            }} 
+            className="flex items-center gap-3 px-10 py-4 bg-slate-900 text-white rounded-[2rem] font-black shadow-xl hover:bg-slate-800 transition-all group"
+          >
+            Next Step <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/>
+          </button>
         </div>
       )}
     </div>
