@@ -16,10 +16,17 @@ const soilTypes = ['Clayey', 'Sandy', 'Loamy', 'Silty'];
 const crops = ['Wheat', 'Rice', 'Corn', 'Soybean', 'Cotton', 'Sugarcane', 'Potato'];
 
 const soilColors: Record<string, string> = {
-  'Clayey': 'bg-[#D35400]', // Burnt Orange/Clay
-  'Sandy': 'bg-[#F1C40F]',  // Sunflower Yellow/Sand
-  'Loamy': 'bg-[#3E2723]',  // Dark Rich Brown/Loam
-  'Silty': 'bg-[#78909C]'   // Blue Grey/Silt
+  'Clayey': '#D35400', // Burnt Orange/Clay
+  'Sandy': '#F1C40F',  // Sunflower Yellow/Sand
+  'Loamy': '#3E2723',  // Dark Rich Brown/Loam
+  'Silty': '#78909C'   // Blue Grey/Silt
+};
+
+const soilDescriptions: Record<string, string> = {
+  'Clayey': 'High water retention, nutrient rich but prone to waterlogging.',
+  'Sandy': 'Excellent drainage, fast warming but low nutrient holding capacity.',
+  'Loamy': 'The ideal balance; holds moisture well while providing good aeration.',
+  'Silty': 'Smooth texture, fertile, holds moisture but can be unstable when wet.'
 };
 
 const mockPlots = Array.from({ length: 25 }, (_, i) => ({
@@ -37,7 +44,8 @@ const mockPlots = Array.from({ length: 25 }, (_, i) => ({
 const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
   const [selectedPlot, setSelectedPlot] = useState(mockPlots[12]);
   const [targetCrop, setTargetCrop] = useState('Wheat');
-  const [mapMode, setMapMode] = useState<'health' | 'soil'>('health');
+  const [mapMode, setMapMode] = useState<'health' | 'soil' | 'moisture'>('soil');
+  const [isSatelliteView, setIsSatelliteView] = useState(false);
   const [nearbyResults, setNearbyResults] = useState<string | null>(null);
   const [nearbySources, setNearbySources] = useState<GroundingSource[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
@@ -177,10 +185,15 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
     setLoading(false);
   };
 
-  const getHealthColor = (val: number) => {
-    if (val > 85) return 'bg-emerald-500';
-    if (val > 70) return 'bg-yellow-400';
-    return 'bg-rose-500';
+  const getHealthHex = (val: number) => {
+    if (val > 85) return '#10b981'; // emerald-500
+    if (val > 70) return '#facc15'; // yellow-400
+    return '#f43f5e'; // rose-500
+  };
+
+  const getMoistureHex = (val: number) => {
+    const intensity = Math.min(255, Math.max(0, val * 2.5));
+    return `rgba(59, 130, 246, ${val / 100})`; // blue-500 with moisture opacity
   };
 
   return (
@@ -244,43 +257,84 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
             <div className="flex justify-between items-center mb-8">
               <div>
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">Spatial Topology</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select plot to inspect</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Digital Twin Boundary</p>
               </div>
-              <div className="flex bg-slate-100 p-1 rounded-xl">
+              <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl">
+                {['soil', 'health', 'moisture'].map((mode) => (
+                  <button 
+                    key={mode}
+                    onClick={() => setMapMode(mode as any)}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tight transition-all ${mapMode === mode ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    {mode}
+                  </button>
+                ))}
                 <button 
-                  onClick={() => setMapMode('health')}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'health' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                  onClick={() => setIsSatelliteView(!isSatelliteView)}
+                  className={`p-1.5 rounded-lg transition-all ${isSatelliteView ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
                 >
-                  Health
-                </button>
-                <button 
-                  onClick={() => setMapMode('soil')}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'soil' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
-                >
-                  Soil
+                  <Satellite size={12} />
                 </button>
               </div>
             </div>
 
-            <div className="relative group p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100">
-              <div className="grid grid-cols-5 gap-3 aspect-square max-w-[360px] mx-auto">
-                {mockPlots.map(p => (
-                  <div 
-                    key={p.id} 
-                    onClick={() => { setSelectedPlot(p); setFertilizerAdvice(null); setSatelliteAnalysis(null); }} 
-                    className={`rounded-2xl cursor-pointer transition-all duration-300 hover:scale-110 active:scale-95 flex flex-col items-center justify-center text-[10px] font-black shadow-sm ${
-                      selectedPlot.id === p.id 
-                      ? 'ring-[6px] ring-emerald-500/20 ring-offset-2 z-20 scale-110 shadow-xl' 
-                      : 'hover:z-10 opacity-90 hover:opacity-100'
-                    } ${
-                      mapMode === 'health' 
-                      ? getHealthColor(p.health)
-                      : soilColors[p.soilType]
-                    }`}
-                  >
-                    <span className="text-white drop-shadow-sm">{p.id}</span>
+            <div className="relative group p-4 bg-slate-50 rounded-[2.5rem] border border-slate-100">
+              <div className="relative aspect-square max-w-[400px] mx-auto bg-slate-200 rounded-[2rem] overflow-hidden shadow-inner">
+                {isSatelliteView && (
+                  <div className="absolute inset-0 z-0 opacity-40 mix-blend-multiply transition-opacity duration-500">
+                    <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&q=80&w=800" alt="Satellite view" className="w-full h-full object-cover scale-150 grayscale" />
+                  </div>
+                )}
+                
+                <svg viewBox="0 0 100 100" className="w-full h-full relative z-10 filter drop-shadow-md">
+                  {mockPlots.map((p, i) => {
+                    const row = Math.floor(i / 5);
+                    const col = i % 5;
+                    const x = col * 20;
+                    const y = row * 20;
+                    
+                    // Simple polygon-like grid with slight offsets for "organic" look
+                    const path = `M ${x + 1} ${y + 1} L ${x + 19} ${y + 1} L ${x + 19} ${y + 19} L ${x + 1} ${y + 19} Z`;
+                    
+                    let fillColor = 'transparent';
+                    if (mapMode === 'soil') fillColor = soilColors[p.soilType];
+                    else if (mapMode === 'health') fillColor = getHealthHex(p.health);
+                    else if (mapMode === 'moisture') fillColor = getMoistureHex(p.moisture);
+
+                    return (
+                      <path 
+                        key={p.id}
+                        d={path}
+                        fill={fillColor}
+                        stroke="#fff"
+                        strokeWidth="0.5"
+                        className={`cursor-pointer transition-all duration-300 hover:opacity-80 active:scale-95 ${selectedPlot.id === p.id ? 'stroke-white stroke-[2px] opacity-100 scale-105' : 'opacity-90'}`}
+                        onClick={() => setSelectedPlot(p)}
+                      >
+                        <title>{p.id}: {p.soilType} Soil</title>
+                      </path>
+                    );
+                  })}
+                </svg>
+              </div>
+              
+              <div className="mt-6 flex flex-wrap justify-center gap-4">
+                {mapMode === 'soil' && soilTypes.map(type => (
+                  <div key={type} className="flex items-center gap-2 group relative cursor-help">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: soilColors[type] }}></div>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{type}</span>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white text-[9px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                      {soilDescriptions[type]}
+                    </div>
                   </div>
                 ))}
+                {mapMode === 'health' && (
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-[9px] font-bold text-slate-400">GOOD</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-400"></div><span className="text-[9px] font-bold text-slate-400">STRESSED</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500"></div><span className="text-[9px] font-bold text-slate-400">CRITICAL</span></div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -364,7 +418,7 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
               <div>
                 <div className="flex items-center gap-3">
                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">Plot {selectedPlot.id} Intelligence</h3>
-                  <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white ${getHealthColor(selectedPlot.health)}`}>
+                  <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white`} style={{ backgroundColor: getHealthHex(selectedPlot.health) }}>
                     {selectedPlot.health}% Health
                   </div>
                 </div>
