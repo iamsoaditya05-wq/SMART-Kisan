@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Droplets, Thermometer, ShieldCheck, Camera, Activity, Power, FlaskConical, RefreshCw, AlertTriangle, 
+  Droplets, Thermometer, ShieldCheck, Camera as CameraIcon, Activity, Power, FlaskConical, RefreshCw, AlertTriangle, 
   Map as MapIcon, Info, Layers, Sprout, Sparkles, ClipboardList, Satellite, Waves, Zap, Globe, 
   TrendingUp, Scan, BrainCircuit, UploadCloud, Microscope, Navigation, MapPin, Eye, Filter, MousePointer2,
-  ChevronDown
+  ChevronDown, Gauge, Wind, Camera, Check, X
 } from 'lucide-react';
-import { analyzeLeafHealth, getFertilizerRecommendation, analyzeSatelliteNDVI, getNearbyAgriResources, GroundingSource } from '../services/geminiService';
+import { analyzeLeafHealth, getFertilizerRecommendation, analyzeSatelliteNDVI, getNearbyAgriResources, detectSoilTypeFromImage, fetchBlynkMoisture, GroundingSource } from '../services/geminiService';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, AreaChart, Area
 } from 'recharts';
@@ -26,10 +26,11 @@ const mockPlots = Array.from({ length: 25 }, (_, i) => ({
   id: `P-${i + 1}`,
   soilType: soilTypes[Math.floor(Math.random() * 4)],
   moisture: Math.floor(Math.random() * 60) + 15,
-  health: Math.floor(Math.random() * 30) + 65,
+  health: Math.floor(Math.random() * 40) + 60,
   ndvi: 0.3 + Math.random() * 0.6,
-  ph: 6.0 + Math.random(),
-  ec: 0.8 + Math.random(),
+  ph: 5.5 + Math.random() * 2,
+  ec: 0.5 + Math.random() * 1.5,
+  temp: 22 + Math.random() * 8,
   npk: { n: Math.random() * 100, p: Math.random() * 100, k: Math.random() * 100 }
 }));
 
@@ -44,6 +45,85 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
   const [satelliteAnalysis, setSatelliteAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [spectralLoading, setSpectralLoading] = useState(false);
+
+  // Blynk & Camera States
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [soilAnalysisResult, setSoilAnalysisResult] = useState<string | null>(null);
+  const [isVisionLoading, setIsVisionLoading] = useState(false);
+  const [blynkData, setBlynkData] = useState<{ moisture: number; suggestedIrrigation: number } | null>(null);
+  const [isBlynkLoading, setIsBlynkLoading] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const startCamera = async () => {
+    setIsCameraOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch (err) {
+      console.error("Camera access denied:", err);
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setIsCameraOpen(false);
+  };
+
+  const captureAndAnalyzeSoil = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    setIsVisionLoading(true);
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+
+    const base64Image = canvas.toDataURL('image/jpeg').split(',')[1];
+    
+    try {
+      const result = await detectSoilTypeFromImage(base64Image, language);
+      setSoilAnalysisResult(result);
+      
+      // Persist to Supabase soil_detections
+      await supabase.from('soil_detections').insert({
+        detected_soil_type: result.split('\n')[0].replace('Soil Type: ', ''),
+        analysis_explanation: result,
+        confidence_score: 0.92 // Simulated
+      });
+      
+      stopCamera();
+    } catch (error) {
+      console.error("Vision Analysis Error:", error);
+    } finally {
+      setIsVisionLoading(false);
+    }
+  };
+
+  const syncWithBlynk = async () => {
+    setIsBlynkLoading(true);
+    try {
+      const data = await fetchBlynkMoisture("YOUR_BLYNK_TOKEN", "V1");
+      setBlynkData(data);
+
+      // Persist to Supabase blynk_telemetry
+      await supabase.from('blynk_telemetry').insert({
+        device_id: 'NODE-001',
+        moisture_level: data.moisture,
+        suggested_irrigation_liters: data.suggestedIrrigation,
+        status: 'sync_success'
+      });
+    } catch (error) {
+      console.error("Blynk Sync Failed:", error);
+    } finally {
+      setIsBlynkLoading(false);
+    }
+  };
 
   const fetchResources = async (type: string) => {
     setNearbyLoading(true);
@@ -75,8 +155,7 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
       );
       setFertilizerAdvice(result);
 
-      // Persist to Supabase fertilizer_recommendations
-      const { data: recData, error } = await supabase.from('fertilizer_recommendations').insert({
+      const { data: recData } = await supabase.from('fertilizer_recommendations').insert({
         crop_type: targetCrop,
         recommendation_text: result,
         target_nutrients: selectedPlot.npk,
@@ -98,298 +177,247 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
     setLoading(false);
   };
 
-  const handleSpectralAnalysis = async () => {
-    setSpectralLoading(true);
-    try {
-      const placeholderImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-      const result = await analyzeSatelliteNDVI(placeholderImage, language);
-      setSatelliteAnalysis(result);
-
-      // Store NDVI reading in Supabase
-      await supabase.from('ndvi_readings').insert({
-        ndvi_value: selectedPlot.ndvi,
-        source: 'Sentinel-2 (Simulated)',
-        captured_at: new Date().toISOString(),
-        metadata: { analysis: result }
-      });
-    } catch (error) {
-      console.error("Supabase Save Error (NDVI):", error);
-    }
-    setSpectralLoading(false);
-  };
-
   const getHealthColor = (val: number) => {
     if (val > 85) return 'bg-emerald-500';
-    if (val > 75) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  const getNdviStatus = (val: number) => {
-    if (val > 0.7) return 'Excellent Biomass';
-    if (val > 0.4) return 'Moderate Growth';
-    return 'Stress Detected';
+    if (val > 70) return 'bg-yellow-400';
+    return 'bg-rose-500';
   };
 
   return (
     <div className="space-y-8 animate-fadeIn pb-12">
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-10 rounded-[3rem] shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-emerald-600 to-teal-800 text-white p-10 rounded-[3rem] shadow-xl relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
-          <div className="flex items-center gap-2 mb-4 bg-white/20 w-fit px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
-            <BrainCircuit size={14} /> Grounded AI
+          <div className="flex items-center gap-2 mb-4 bg-white/20 w-fit px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+            <Globe size={14} className="animate-spin-slow" /> GIS Plot Manager
           </div>
-          <h2 className="text-4xl font-black mb-3">Precision Ecosystem</h2>
-          <p className="opacity-90 font-medium">Connect your field with real-world resources, satellite spectral data, and topographical soil mapping.</p>
+          <h2 className="text-4xl font-black mb-3">Farm Matrix Explorer</h2>
+          <p className="opacity-90 font-medium">Interactive spatial mapping for real-time plot monitoring and nutrient lifecycle management.</p>
         </div>
         <Satellite className="absolute right-[-20px] top-[-20px] text-white/10 w-64 h-64 rotate-12" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-8">
-          {/* Spatial Plot Matrix & Topography */}
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Spatial Map Column */}
+        <div className="lg:col-span-5 space-y-8">
+          {/* Blynk IoT Widget */}
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
             <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Zap size={20} /></div>
+                <h3 className="text-xl font-black text-slate-800">Blynk IoT Telemetry</h3>
+              </div>
+              <button 
+                onClick={syncWithBlynk}
+                disabled={isBlynkLoading}
+                className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all disabled:opacity-50"
+              >
+                <RefreshCw className={isBlynkLoading ? 'animate-spin' : ''} size={18} />
+              </button>
+            </div>
+            
+            {!blynkData ? (
+              <div className="text-center py-6">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No active session</p>
+                <button onClick={syncWithBlynk} className="mt-2 text-emerald-600 font-black text-xs hover:underline">Connect Sensors</button>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-fadeIn">
+                <div className="flex justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <div>
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Blynk Moisture</p>
+                    <p className="text-2xl font-black text-emerald-900">{blynkData.moisture.toFixed(1)}%</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Suggested Water</p>
+                    <p className="text-2xl font-black text-emerald-900">{blynkData.suggestedIrrigation.toFixed(2)}L/m²</p>
+                  </div>
+                </div>
+                <div className="p-4 bg-slate-900 rounded-2xl text-white flex items-center gap-3">
+                   <Info className="text-emerald-400" size={16} />
+                   <p className="text-[10px] font-medium leading-relaxed">Irrigation deficit calculated from 80% saturation target for {targetCrop}.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative">
+            <div className="flex justify-between items-center mb-8">
               <div>
-                <h3 className="text-xl font-black text-slate-800">Field Topology Map</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Plot Monitoring</p>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">Spatial Topology</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select plot to inspect</p>
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button 
                   onClick={() => setMapMode('health')}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'health' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'health' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
                 >
                   Health
                 </button>
                 <button 
                   onClick={() => setMapMode('soil')}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'soil' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'soil' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
                 >
-                  Soil Type
+                  Soil
                 </button>
               </div>
             </div>
 
-            <div className="relative mb-8 group">
-              <div className="grid grid-cols-5 gap-3 aspect-square max-w-[340px] mx-auto p-4 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+            <div className="relative group p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100">
+              <div className="grid grid-cols-5 gap-3 aspect-square max-w-[360px] mx-auto">
                 {mockPlots.map(p => (
                   <div 
                     key={p.id} 
                     onClick={() => { setSelectedPlot(p); setFertilizerAdvice(null); setSatelliteAnalysis(null); }} 
-                    className={`rounded-xl cursor-pointer transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center text-[8px] font-black ${
+                    className={`rounded-2xl cursor-pointer transition-all duration-300 hover:scale-110 active:scale-95 flex flex-col items-center justify-center text-[10px] font-black shadow-sm ${
                       selectedPlot.id === p.id 
-                      ? 'ring-4 ring-emerald-200 z-10 scale-105 shadow-xl' 
-                      : 'hover:z-10'
+                      ? 'ring-[6px] ring-emerald-500/20 ring-offset-2 z-20 scale-110 shadow-xl' 
+                      : 'hover:z-10 opacity-90 hover:opacity-100'
                     } ${
                       mapMode === 'health' 
                       ? getHealthColor(p.health)
                       : soilColors[p.soilType]
                     }`}
                   >
-                    <span className="text-white/40 group-hover:text-white/80 transition-colors">{p.id}</span>
+                    <span className="text-white drop-shadow-sm">{p.id}</span>
                   </div>
                 ))}
               </div>
-              
-              {/* Legend Overlay */}
-              <div className="mt-6 flex flex-wrap justify-center gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                {mapMode === 'health' ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase">Optimal</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase">Attention</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase">Critical</span>
-                    </div>
-                  </>
-                ) : (
-                  soilTypes.map(type => (
-                    <div key={type} className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${soilColors[type]}`}></div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase">{type}</span>
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-5 bg-slate-900 text-white rounded-[2rem] shadow-lg relative overflow-hidden group">
-                <div className="relative z-10">
-                   <div className="flex items-center gap-2 mb-2 opacity-60">
-                     <Layers size={14} className="text-emerald-400" />
-                     <span className="text-[10px] font-black uppercase tracking-widest">Soil Composition</span>
-                   </div>
-                   <div className="text-2xl font-black">{selectedPlot.soilType}</div>
-                   <p className="text-[10px] font-medium text-emerald-400/80 mt-1">Rich in organic matter and nutrients</p>
-                </div>
-                <div className={`absolute right-[-10px] bottom-[-10px] w-20 h-20 rounded-full opacity-20 blur-2xl ${soilColors[selectedPlot.soilType]}`}></div>
-              </div>
-              <div className="p-5 bg-emerald-50 rounded-[2rem] border border-emerald-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Droplets size={14} className="text-blue-500" />
-                  <span className="text-[10px] font-black uppercase text-slate-400">Moisture Profile</span>
-                </div>
-                <div className="text-2xl font-black text-slate-800">{selectedPlot.moisture}%</div>
-                <div className="w-full bg-white h-1.5 rounded-full mt-3 overflow-hidden">
-                   <div className="bg-blue-500 h-full rounded-full transition-all duration-1000" style={{ width: `${selectedPlot.moisture}%` }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ground Support Finder */}
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-6">
-              <MapPin className="text-blue-500" /> Ground Support
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => fetchResources("Soil Testing Lab")} className="p-4 bg-blue-50 text-blue-700 rounded-2xl text-xs font-bold hover:bg-blue-100 transition-all flex flex-col items-center gap-2 group">
-                <Microscope size={20} className="group-hover:scale-110 transition-transform" /> Soil Labs
-              </button>
-              <button onClick={() => fetchResources("Fertilizer Wholesale Store")} className="p-4 bg-orange-50 text-orange-700 rounded-2xl text-xs font-bold hover:bg-orange-100 transition-all flex flex-col items-center gap-2 group">
-                <Sprout size={20} className="group-hover:scale-110 transition-transform" /> Fertilizers
-              </button>
-            </div>
-
-            {nearbyLoading && (
-              <div className="flex items-center gap-3 text-blue-600 animate-pulse bg-blue-50 p-4 rounded-2xl font-black text-xs uppercase">
-                <RefreshCw size={18} className="animate-spin" /> Querying Google Maps...
-              </div>
-            )}
-
-            {nearbyResults && (
-              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 animate-fadeIn space-y-4">
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{nearbyResults}</p>
-                <div className="flex flex-col gap-2">
-                   {nearbySources.map((source, i) => (
-                     <a key={i} href={source.uri} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:border-blue-400 transition-all">
-                       <span className="flex items-center gap-2"><MapIcon size={14} className="text-blue-500" /> {source.title}</span>
-                       <Navigation size={14} />
-                     </a>
-                   ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="space-y-8">
-          {/* Satellite NDVI Section */}
-          <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl border border-slate-800 overflow-hidden relative">
-            <Satellite className="absolute right-[-10px] bottom-[-10px] text-white/5 w-32 h-32" />
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h3 className="text-xl font-black flex items-center gap-2">
-                    <Globe className="text-emerald-400" /> Satellite Index
-                  </h3>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">NDVI Vegetative Reading</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-3xl font-black text-emerald-400">{selectedPlot.ndvi.toFixed(2)}</div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">{getNdviStatus(selectedPlot.ndvi)}</div>
-                </div>
+        {/* Detailed Sensor Data Column */}
+        <div className="lg:col-span-7 space-y-8">
+          {/* Soil Detection Camera Widget */}
+          <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm relative overflow-hidden min-h-[400px]">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <CameraIcon className="text-emerald-600" /> Ground Vision AI
+                </h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Detect Soil Type from Camera</p>
               </div>
-
-              <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden mb-6 relative">
-                <div className="flex h-full w-full">
-                  <div className="bg-red-500 h-full w-[30%]" />
-                  <div className="bg-yellow-500 h-full w-[40%]" />
-                  <div className="bg-emerald-500 h-full w-[30%]" />
-                </div>
-                <div className="absolute h-6 w-1 bg-white top-[-6px] rounded-full shadow-lg transition-all duration-1000" style={{ left: `${selectedPlot.ndvi * 100}%` }} />
-              </div>
-
-              {!satelliteAnalysis ? (
+              {!isCameraOpen && !soilAnalysisResult && (
                 <button 
-                  onClick={handleSpectralAnalysis}
-                  disabled={spectralLoading}
-                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  onClick={startCamera}
+                  className="px-6 py-2.5 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all flex items-center gap-2"
                 >
-                  {spectralLoading ? <RefreshCw className="animate-spin" size={18} /> : <Scan size={18} />}
-                  Run Spectral Breakdown
+                  Open Camera
                 </button>
-              ) : (
-                <div className="bg-emerald-950/50 p-6 rounded-2xl border border-emerald-900/50 animate-fadeIn max-h-[200px] overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center gap-2 mb-3 text-emerald-400">
-                    <Eye size={16} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">XAI Spectral Insight</span>
+              )}
+              {(isCameraOpen || soilAnalysisResult) && (
+                <button 
+                  onClick={() => { stopCamera(); setSoilAnalysisResult(null); }}
+                  className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-all"
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            <div className="relative rounded-[2.5rem] overflow-hidden bg-slate-100 aspect-video border-4 border-slate-50 shadow-inner flex items-center justify-center">
+              {isCameraOpen ? (
+                <div className="relative w-full h-full">
+                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 border-2 border-emerald-500/40 m-12 rounded-[2rem] pointer-events-none">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border border-white/50 rounded-full animate-pulse"></div>
                   </div>
-                  <p className="text-xs text-emerald-50 leading-relaxed whitespace-pre-wrap italic">{satelliteAnalysis}</p>
+                  <button 
+                    onClick={captureAndAnalyzeSoil}
+                    disabled={isVisionLoading}
+                    className="absolute bottom-8 left-1/2 -translate-x-1/2 px-10 py-4 bg-emerald-600 text-white rounded-full font-black shadow-2xl flex items-center gap-2 hover:scale-105 transition-all"
+                  >
+                    {isVisionLoading ? <RefreshCw className="animate-spin" /> : <Scan />}
+                    {isVisionLoading ? 'Analyzing...' : 'Analyze Ground'}
+                  </button>
+                </div>
+              ) : soilAnalysisResult ? (
+                <div className="p-8 w-full h-full bg-emerald-50 flex flex-col justify-center animate-fadeIn overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Check className="text-emerald-600" size={24} />
+                    <h4 className="font-black text-emerald-900">Analysis Complete</h4>
+                  </div>
+                  <div className="space-y-4">
+                    <p className="text-sm text-emerald-900 leading-relaxed font-medium whitespace-pre-wrap italic bg-white/50 p-6 rounded-2xl border border-emerald-100">
+                      {soilAnalysisResult}
+                    </p>
+                    <button 
+                      onClick={() => { setSoilAnalysisResult(null); startCamera(); }}
+                      className="w-full py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+                    >
+                      New Scan
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center p-12">
+                   <CameraIcon size={48} className="mx-auto text-slate-300 mb-4" />
+                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Camera Offline</p>
                 </div>
               )}
             </div>
+            <canvas ref={canvasRef} className="hidden" />
           </div>
 
-          {/* Nutrient Intelligence Section */}
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
-              <FlaskConical className="text-orange-500" /> Nutrient Intelligence
-            </h3>
-            
-            <div className="mb-6 space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Select Plan Target</label>
-              <div className="relative group">
-                <select 
-                  value={targetCrop}
-                  onChange={(e) => setTargetCrop(e.target.value)}
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none appearance-none font-bold text-slate-700 cursor-pointer focus:ring-2 focus:ring-orange-100 transition-all"
-                >
-                  {crops.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors" size={18} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {Object.entries(selectedPlot.npk).map(([key, val]) => (
-                <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative overflow-hidden group">
-                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1 relative z-10">{key}</div>
-                  <div className="text-lg font-black text-slate-800 relative z-10">{Math.round(val)}%</div>
-                  <div className="absolute bottom-0 left-0 h-1 bg-orange-400/20 w-full transition-all group-hover:h-full group-hover:bg-orange-400/5" style={{ height: `${val}%` }}></div>
-                </div>
-              ))}
-            </div>
-
-            {!fertilizerAdvice ? (
-              <button 
-                onClick={handleFertilizerAdvice}
-                disabled={loading}
-                className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-slate-900/10"
-              >
-                {loading ? <RefreshCw className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                Plan for {targetCrop}
-              </button>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-orange-50/50 p-6 rounded-[2rem] border border-orange-100 animate-fadeIn max-h-[300px] overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center gap-2 mb-3 text-orange-600">
-                    <Info size={16} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Laboratory Recommendation: {targetCrop}</span>
+          <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">Plot {selectedPlot.id} Intelligence</h3>
+                  <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white ${getHealthColor(selectedPlot.health)}`}>
+                    {selectedPlot.health}% Health
                   </div>
-                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{fertilizerAdvice}</p>
                 </div>
-                <button 
-                  onClick={() => setFertilizerAdvice(null)}
-                  className="w-full py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  Recalculate for different crop
-                </button>
+                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Real-time Telemetry Stream</p>
               </div>
-            )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <SensorDetail icon={Droplets} label="Moisture" value={`${selectedPlot.moisture}%`} color="text-blue-500" bg="bg-blue-50" />
+              <SensorDetail icon={Thermometer} label="Temperature" value={`${selectedPlot.temp.toFixed(1)}°C`} color="text-orange-500" bg="bg-orange-50" />
+              <SensorDetail icon={Gauge} label="pH Level" value={selectedPlot.ph.toFixed(1)} color="text-indigo-500" bg="bg-indigo-50" />
+              <SensorDetail icon={Zap} label="Conductivity" value={`${selectedPlot.ec.toFixed(2)} mS/cm`} color="text-purple-500" bg="bg-purple-50" />
+            </div>
+
+            <div className="mt-8 p-8 bg-slate-900 rounded-[2.5rem] text-white">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-2">
+                  <Waves className="text-emerald-400" />
+                  <span className="text-xs font-black uppercase tracking-widest">Active NPK Profile</span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-400 opacity-60">OPTIMAL RANGE</span>
+              </div>
+              <div className="space-y-6">
+                <NPKBar label="N (Nitrogen)" value={selectedPlot.npk.n} color="bg-blue-500" />
+                <NPKBar label="P (Phosphorus)" value={selectedPlot.npk.p} color="bg-orange-500" />
+                <NPKBar label="K (Potassium)" value={selectedPlot.npk.k} color="bg-purple-500" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+const SensorDetail = ({ icon: Icon, label, value, color, bg }: any) => (
+  <div className={`p-5 ${bg} rounded-[2rem] border border-slate-100/50 flex flex-col items-center text-center transition-transform hover:scale-105`}>
+    <div className={`p-3 rounded-2xl ${bg} ${color} mb-3 shadow-sm border border-current/10`}><Icon size={18} /></div>
+    <div className="text-[8px] font-black uppercase text-slate-400 tracking-widest mb-1">{label}</div>
+    <div className={`text-sm font-black text-slate-800`}>{value}</div>
+  </div>
+);
+
+const NPKBar = ({ label, value, color }: any) => (
+  <div className="space-y-2">
+    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-tighter">
+      <span>{label}</span>
+      <span className="text-emerald-400">{Math.round(value)}%</span>
+    </div>
+    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden relative">
+      <div className={`h-full ${color} rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.3)]`} style={{ width: `${value}%` }}></div>
+    </div>
+  </div>
+);
 
 export default FarmFlow;

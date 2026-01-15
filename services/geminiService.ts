@@ -18,6 +18,86 @@ export interface GeminiResponse {
   sources: GroundingSource[];
 }
 
+/**
+ * Blynk IoT API Integration
+ * Fetches moisture and suggests irrigation
+ */
+export const fetchBlynkMoisture = async (token: string, pin: string = 'V1') => {
+  try {
+    // In a real environment, this would be a fetch to https://blynk.cloud/external/api/get?token=${token}&${pin}
+    // We simulate the API behavior for the hackathon context
+    const mockMoisture = 35 + Math.random() * 20;
+    const targetMoisture = 80;
+    const deficit = targetMoisture - mockMoisture;
+    // Suggest 5 liters per 10% deficit per square meter
+    const suggestedLiters = Math.max(0, (deficit / 10) * 5);
+
+    return {
+      moisture: mockMoisture,
+      suggestedIrrigation: suggestedLiters,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error("Blynk API Error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Gemini Vision for Soil Detection
+ */
+export const detectSoilTypeFromImage = async (base64Image: string, lang: string = 'en') => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
+          { text: `Analyze this soil image. 
+          1. Identify the soil type (Clayey, Sandy, Loamy, Silty).
+          2. Provide a confidence score (0-1).
+          3. Explain the visual characteristics (color, grain size, moisture appearance) in an "XAI Analysis" section.
+          Respond in ${getLanguageName(lang)}.` }
+        ]
+      }
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Soil Vision Error:", error);
+    return "Soil detection failed.";
+  }
+};
+
+export const getWeatherFeedback = async (region1: string, region2: string, lang: string = 'en'): Promise<GeminiResponse> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Fetch current real-time weather (Temperature, Humidity, Rain probability) for ${region1} and ${region2}, India. 
+      1. Compare the conditions between these two regions.
+      2. Provide feedback on which region is currently better for harvesting or sowing sensitive crops like Wheat or Rice.
+      3. Respond in ${getLanguageName(lang)}.`,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const sources: GroundingSource[] = [];
+    response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((chunk: any) => {
+      if (chunk.web) {
+        sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+      }
+    });
+
+    return {
+      text: response.text || "Weather data currently unavailable.",
+      sources: sources
+    };
+  } catch (error) {
+    console.error("Gemini Weather Feedback Error:", error);
+    return { text: "Failed to fetch real-time weather comparisons.", sources: [] };
+  }
+};
+
 export const getMarketAnalysis = async (cropData: string, lang: string = 'en') => {
   try {
     const response = await ai.models.generateContent({
