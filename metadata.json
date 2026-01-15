@@ -2,6 +2,7 @@
   "name": "SMART Kisan - Intelligent Agriculture Platform",
   "description": "A smart monitoring and automated resource technology for modern farmers, featuring Price Watcher, Farm Flow, and Buyers Connect.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ]
 }
