@@ -5,6 +5,7 @@ import { getMarketAnalysis, getLiveMarketPrices, GroundingSource } from '../serv
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ReferenceLine
 } from 'recharts';
+import { supabase } from '../lib/supabase';
 
 interface CropData {
   name: string;
@@ -64,9 +65,34 @@ const PriceWatcher: React.FC = () => {
 
   const fetchAnalysis = async () => {
     setLoading(true);
-    const dataString = `Current ${selectedCrop.name} price: ₹${selectedCrop.price}.`;
-    const result = await getMarketAnalysis(dataString);
-    setAiAnalysis(result.text);
+    try {
+      const dataString = `Current ${selectedCrop.name} price: ₹${selectedCrop.price}.`;
+      const result = await getMarketAnalysis(dataString);
+      setAiAnalysis(result.text);
+
+      // Persist prediction to Supabase price_predictions
+      const { data: predData } = await supabase.from('price_predictions').insert({
+        crop_name: selectedCrop.name,
+        market_name: 'North India Hub',
+        region: 'North India',
+        current_market_price: selectedCrop.price,
+        predicted_price: selectedCrop.forecast[selectedCrop.forecast.length - 1].value,
+        model_version: 'gemini-3-flash-v1',
+        predicted_at: new Date().toISOString()
+      }).select();
+
+      if (predData?.[0]) {
+        await supabase.from('xai_explanations').insert({
+          reference_type: 'price_prediction',
+          reference_id: predData[0].id,
+          language_code: 'en',
+          explanation_text: result.text,
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error("Supabase Save Error (Prediction):", error);
+    }
     setLoading(false);
   };
 

@@ -20,14 +20,13 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
   const [xaiInsight, setXaiInsight] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [plotData, setPlotData] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
     fetchPlotData();
     const subscription = supabase
       .channel('plots_realtime')
       .on('postgres_changes', { event: '*', table: 'plots' }, (payload) => {
-        setPlotData(payload.new);
+        if (payload.new) setPlotData(payload.new);
       })
       .subscribe();
 
@@ -38,7 +37,7 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
     const { data, error } = await supabase
       .from('plots')
       .select('*')
-      .order('last_updated', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
       .single();
     
@@ -49,7 +48,7 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
     setIsAnalyzing(true);
     try {
       const statusStr = plotData 
-        ? `Moisture ${plotData.moisture}%, Temp ${plotData.temperature}°C, Health ${plotData.health}/100` 
+        ? `Moisture ${plotData.moisture || 38.4}%, Soil Type ${plotData.soil_type || 'Loamy'}, Health ${plotData.health || 94}/100` 
         : "Moisture 38.4%, Soil Temp 24.8°C, Health 94/100";
 
       const langName = language === 'hi' ? 'Hindi' : language === 'mr' ? 'Marathi' : language === 'pa' ? 'Punjabi' : 'English';
@@ -57,8 +56,22 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
         model: 'gemini-3-flash-preview',
         contents: `Provide an Explainable AI (XAI) summary for a farmer. Current status: ${statusStr}. Explain why these values are good or bad and what the AI logic suggests for tomorrow. Language: ${langName}.`,
       });
-      setXaiInsight(response.text || "Insight generation failed.");
+      
+      const text = response.text || "Insight generation failed.";
+      setXaiInsight(text);
+
+      // Log XAI explanation to Supabase
+      if (plotData?.id) {
+        await supabase.from('xai_explanations').insert({
+          reference_type: 'plot_status',
+          reference_id: plotData.id,
+          language_code: language,
+          explanation_text: text,
+          created_at: new Date().toISOString()
+        });
+      }
     } catch (e) {
+      console.error("XAI Supabase Log Error:", e);
       setXaiInsight("Connection to AI Core lost.");
     } finally {
       setIsAnalyzing(false);
@@ -108,9 +121,12 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
         <StatCard icon={Activity} label={t.health} value={`${plotData?.health || 94}/100`} trend="+4%" unit={t.excellent} color="text-emerald-600" bg="bg-emerald-50" />
       </div>
 
-      {/* Rest of the UI remains visually consistent */}
-      <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-2xl h-64 flex items-center justify-center">
-         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Real-time Telemetry Visualization Stream</p>
+      <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-2xl h-64 flex flex-col items-center justify-center text-center gap-4">
+         <Database className="text-emerald-500 animate-pulse" size={32} />
+         <div>
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Real-time Telemetry Visualization Stream</p>
+            <p className="text-[10px] text-slate-500 font-bold mt-2">Active Plot: {plotData?.plot_name || 'Main Field'}</p>
+         </div>
       </div>
     </div>
   );

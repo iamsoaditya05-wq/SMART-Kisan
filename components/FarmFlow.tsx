@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Droplets, Thermometer, ShieldCheck, Camera, Activity, Power, FlaskConical, RefreshCw, AlertTriangle, 
   Map as MapIcon, Info, Layers, Sprout, Sparkles, ClipboardList, Satellite, Waves, Zap, Globe, 
@@ -10,6 +10,7 @@ import { analyzeLeafHealth, getFertilizerRecommendation, analyzeSatelliteNDVI, g
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, AreaChart, Area
 } from 'recharts';
+import { supabase } from '../lib/supabase';
 
 const soilTypes = ['Clayey', 'Sandy', 'Loamy', 'Silty'];
 const crops = ['Wheat', 'Rice', 'Corn', 'Soybean', 'Cotton', 'Sugarcane', 'Potato'];
@@ -66,22 +67,54 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
 
   const handleFertilizerAdvice = async () => {
     setLoading(true);
-    // Modified to include the actual selected crop type
-    const result = await getFertilizerRecommendation(
-      selectedPlot.npk, 
-      `${targetCrop} on ${selectedPlot.soilType} soil`, 
-      language
-    );
-    setFertilizerAdvice(result);
+    try {
+      const result = await getFertilizerRecommendation(
+        selectedPlot.npk, 
+        `${targetCrop} on ${selectedPlot.soilType} soil`, 
+        language
+      );
+      setFertilizerAdvice(result);
+
+      // Persist to Supabase fertilizer_recommendations
+      const { data: recData, error } = await supabase.from('fertilizer_recommendations').insert({
+        crop_type: targetCrop,
+        recommendation_text: result,
+        target_nutrients: selectedPlot.npk,
+        created_at: new Date().toISOString()
+      }).select();
+
+      if (recData?.[0]) {
+        await supabase.from('xai_explanations').insert({
+          reference_type: 'fertilizer_rec',
+          reference_id: recData[0].id,
+          language_code: language,
+          explanation_text: result,
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error("Supabase Save Error (Fertilizer):", error);
+    }
     setLoading(false);
   };
 
   const handleSpectralAnalysis = async () => {
     setSpectralLoading(true);
-    // Simulating a base64 encoded satellite crop image
-    const placeholderImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    const result = await analyzeSatelliteNDVI(placeholderImage, language);
-    setSatelliteAnalysis(result);
+    try {
+      const placeholderImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      const result = await analyzeSatelliteNDVI(placeholderImage, language);
+      setSatelliteAnalysis(result);
+
+      // Store NDVI reading in Supabase
+      await supabase.from('ndvi_readings').insert({
+        ndvi_value: selectedPlot.ndvi,
+        source: 'Sentinel-2 (Simulated)',
+        captured_at: new Date().toISOString(),
+        metadata: { analysis: result }
+      });
+    } catch (error) {
+      console.error("Supabase Save Error (NDVI):", error);
+    }
     setSpectralLoading(false);
   };
 
@@ -300,7 +333,6 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
               <FlaskConical className="text-orange-500" /> Nutrient Intelligence
             </h3>
             
-            {/* Added Crop Selection Dropdown */}
             <div className="mb-6 space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Select Plan Target</label>
               <div className="relative group">
