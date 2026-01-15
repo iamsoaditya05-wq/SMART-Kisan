@@ -3,7 +3,8 @@ import React, { useState, useRef } from 'react';
 import { 
   Droplets, Thermometer, ShieldCheck, Camera, Activity, Power, FlaskConical, RefreshCw, AlertTriangle, 
   Map as MapIcon, Info, Layers, Sprout, Sparkles, ClipboardList, Satellite, Waves, Zap, Globe, 
-  TrendingUp, Scan, BrainCircuit, UploadCloud, Microscope, Navigation, MapPin, Eye, Filter, MousePointer2
+  TrendingUp, Scan, BrainCircuit, UploadCloud, Microscope, Navigation, MapPin, Eye, Filter, MousePointer2,
+  ChevronDown
 } from 'lucide-react';
 import { analyzeLeafHealth, getFertilizerRecommendation, analyzeSatelliteNDVI, getNearbyAgriResources, GroundingSource } from '../services/geminiService';
 import { 
@@ -11,6 +12,8 @@ import {
 } from 'recharts';
 
 const soilTypes = ['Clayey', 'Sandy', 'Loamy', 'Silty'];
+const crops = ['Wheat', 'Rice', 'Corn', 'Soybean', 'Cotton', 'Sugarcane', 'Potato'];
+
 const soilColors: Record<string, string> = {
   'Clayey': 'bg-[#D35400]', // Burnt Orange/Clay
   'Sandy': 'bg-[#F1C40F]',  // Sunflower Yellow/Sand
@@ -31,6 +34,7 @@ const mockPlots = Array.from({ length: 25 }, (_, i) => ({
 
 const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
   const [selectedPlot, setSelectedPlot] = useState(mockPlots[12]);
+  const [targetCrop, setTargetCrop] = useState('Wheat');
   const [mapMode, setMapMode] = useState<'health' | 'soil'>('health');
   const [nearbyResults, setNearbyResults] = useState<string | null>(null);
   const [nearbySources, setNearbySources] = useState<GroundingSource[]>([]);
@@ -62,7 +66,12 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
 
   const handleFertilizerAdvice = async () => {
     setLoading(true);
-    const result = await getFertilizerRecommendation(selectedPlot.npk, `${selectedPlot.soilType} soil for Wheat`, language);
+    // Modified to include the actual selected crop type
+    const result = await getFertilizerRecommendation(
+      selectedPlot.npk, 
+      `${targetCrop} on ${selectedPlot.soilType} soil`, 
+      language
+    );
     setFertilizerAdvice(result);
     setLoading(false);
   };
@@ -290,6 +299,24 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
             <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
               <FlaskConical className="text-orange-500" /> Nutrient Intelligence
             </h3>
+            
+            {/* Added Crop Selection Dropdown */}
+            <div className="mb-6 space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Select Plan Target</label>
+              <div className="relative group">
+                <select 
+                  value={targetCrop}
+                  onChange={(e) => setTargetCrop(e.target.value)}
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none appearance-none font-bold text-slate-700 cursor-pointer focus:ring-2 focus:ring-orange-100 transition-all"
+                >
+                  {crops.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors" size={18} />
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-3 mb-6">
               {Object.entries(selectedPlot.npk).map(([key, val]) => (
                 <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative overflow-hidden group">
@@ -299,22 +326,31 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
                 </div>
               ))}
             </div>
+
             {!fertilizerAdvice ? (
               <button 
                 onClick={handleFertilizerAdvice}
                 disabled={loading}
-                className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-slate-900/10"
               >
                 {loading ? <RefreshCw className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                Generate Fertilizer Plan
+                Plan for {targetCrop}
               </button>
             ) : (
-              <div className="bg-orange-50/50 p-6 rounded-[2rem] border border-orange-100 animate-fadeIn">
-                <div className="flex items-center gap-2 mb-3 text-orange-600">
-                  <Info size={16} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Laboratory Recommendation</span>
+              <div className="space-y-4">
+                <div className="bg-orange-50/50 p-6 rounded-[2rem] border border-orange-100 animate-fadeIn max-h-[300px] overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center gap-2 mb-3 text-orange-600">
+                    <Info size={16} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Laboratory Recommendation: {targetCrop}</span>
+                  </div>
+                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{fertilizerAdvice}</p>
                 </div>
-                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{fertilizerAdvice}</p>
+                <button 
+                  onClick={() => setFertilizerAdvice(null)}
+                  className="w-full py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Recalculate for different crop
+                </button>
               </div>
             )}
           </div>
