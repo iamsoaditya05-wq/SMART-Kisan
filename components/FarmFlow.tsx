@@ -3,16 +3,24 @@ import React, { useState, useRef } from 'react';
 import { 
   Droplets, Thermometer, ShieldCheck, Camera, Activity, Power, FlaskConical, RefreshCw, AlertTriangle, 
   Map as MapIcon, Info, Layers, Sprout, Sparkles, ClipboardList, Satellite, Waves, Zap, Globe, 
-  TrendingUp, Scan, BrainCircuit, UploadCloud, Microscope, Navigation, MapPin, Eye
+  TrendingUp, Scan, BrainCircuit, UploadCloud, Microscope, Navigation, MapPin, Eye, Filter, MousePointer2
 } from 'lucide-react';
 import { analyzeLeafHealth, getFertilizerRecommendation, analyzeSatelliteNDVI, getNearbyAgriResources, GroundingSource } from '../services/geminiService';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, AreaChart, Area
 } from 'recharts';
 
+const soilTypes = ['Clayey', 'Sandy', 'Loamy', 'Silty'];
+const soilColors: Record<string, string> = {
+  'Clayey': 'bg-[#D35400]', // Burnt Orange/Clay
+  'Sandy': 'bg-[#F1C40F]',  // Sunflower Yellow/Sand
+  'Loamy': 'bg-[#3E2723]',  // Dark Rich Brown/Loam
+  'Silty': 'bg-[#78909C]'   // Blue Grey/Silt
+};
+
 const mockPlots = Array.from({ length: 25 }, (_, i) => ({
   id: `P-${i + 1}`,
-  soilType: ['Clayey', 'Sandy', 'Loamy', 'Silty'][Math.floor(Math.random() * 4)],
+  soilType: soilTypes[Math.floor(Math.random() * 4)],
   moisture: Math.floor(Math.random() * 60) + 15,
   health: Math.floor(Math.random() * 30) + 65,
   ndvi: 0.3 + Math.random() * 0.6,
@@ -23,6 +31,7 @@ const mockPlots = Array.from({ length: 25 }, (_, i) => ({
 
 const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
   const [selectedPlot, setSelectedPlot] = useState(mockPlots[12]);
+  const [mapMode, setMapMode] = useState<'health' | 'soil'>('health');
   const [nearbyResults, setNearbyResults] = useState<string | null>(null);
   const [nearbySources, setNearbySources] = useState<GroundingSource[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
@@ -67,9 +76,9 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
     setSpectralLoading(false);
   };
 
-  const getNdviColor = (val: number) => {
-    if (val > 0.7) return 'bg-emerald-500';
-    if (val > 0.4) return 'bg-yellow-500';
+  const getHealthColor = (val: number) => {
+    if (val > 85) return 'bg-emerald-500';
+    if (val > 75) return 'bg-yellow-500';
     return 'bg-red-500';
   };
 
@@ -87,49 +96,106 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
             <BrainCircuit size={14} /> Grounded AI
           </div>
           <h2 className="text-4xl font-black mb-3">Precision Ecosystem</h2>
-          <p className="opacity-90 font-medium">Connect your field with real-world resources, satellite spectral data, and laboratory support.</p>
+          <p className="opacity-90 font-medium">Connect your field with real-world resources, satellite spectral data, and topographical soil mapping.</p>
         </div>
         <Satellite className="absolute right-[-20px] top-[-20px] text-white/10 w-64 h-64 rotate-12" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">
-          {/* Spatial Plot Matrix & Real-time Plot Status */}
+          {/* Spatial Plot Matrix & Topography */}
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-800">Spatial Plot Matrix</h3>
-              <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black uppercase tracking-wider text-slate-500">
-                Selected: {selectedPlot.id}
+              <div>
+                <h3 className="text-xl font-black text-slate-800">Field Topology Map</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Plot Monitoring</p>
+              </div>
+              <div className="flex bg-slate-100 p-1 rounded-xl">
+                <button 
+                  onClick={() => setMapMode('health')}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'health' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                >
+                  Health
+                </button>
+                <button 
+                  onClick={() => setMapMode('soil')}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${mapMode === 'soil' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                >
+                  Soil Type
+                </button>
               </div>
             </div>
-            <div className="grid grid-cols-5 gap-3 aspect-square max-w-[320px] mx-auto mb-8">
-              {mockPlots.map(p => (
-                <div 
-                  key={p.id} 
-                  onClick={() => { setSelectedPlot(p); setFertilizerAdvice(null); setSatelliteAnalysis(null); }} 
-                  className={`rounded-xl cursor-pointer transition-all hover:scale-105 active:scale-95 ${
-                    selectedPlot.id === p.id 
-                    ? 'ring-4 ring-emerald-200 bg-emerald-600 shadow-lg' 
-                    : 'bg-emerald-100 hover:bg-emerald-200'
-                  }`} 
-                />
-              ))}
+
+            <div className="relative mb-8 group">
+              <div className="grid grid-cols-5 gap-3 aspect-square max-w-[340px] mx-auto p-4 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                {mockPlots.map(p => (
+                  <div 
+                    key={p.id} 
+                    onClick={() => { setSelectedPlot(p); setFertilizerAdvice(null); setSatelliteAnalysis(null); }} 
+                    className={`rounded-xl cursor-pointer transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center text-[8px] font-black ${
+                      selectedPlot.id === p.id 
+                      ? 'ring-4 ring-emerald-200 z-10 scale-105 shadow-xl' 
+                      : 'hover:z-10'
+                    } ${
+                      mapMode === 'health' 
+                      ? getHealthColor(p.health)
+                      : soilColors[p.soilType]
+                    }`}
+                  >
+                    <span className="text-white/40 group-hover:text-white/80 transition-colors">{p.id}</span>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Legend Overlay */}
+              <div className="mt-6 flex flex-wrap justify-center gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+                {mapMode === 'health' ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Optimal</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Attention</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Critical</span>
+                    </div>
+                  </>
+                ) : (
+                  soilTypes.map(type => (
+                    <div key={type} className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${soilColors[type]}`}></div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase">{type}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-2 mb-1">
-                  <Droplets size={14} className="text-blue-500" />
-                  <span className="text-[10px] font-black uppercase text-slate-400">Moisture</span>
+              <div className="p-5 bg-slate-900 text-white rounded-[2rem] shadow-lg relative overflow-hidden group">
+                <div className="relative z-10">
+                   <div className="flex items-center gap-2 mb-2 opacity-60">
+                     <Layers size={14} className="text-emerald-400" />
+                     <span className="text-[10px] font-black uppercase tracking-widest">Soil Composition</span>
+                   </div>
+                   <div className="text-2xl font-black">{selectedPlot.soilType}</div>
+                   <p className="text-[10px] font-medium text-emerald-400/80 mt-1">Rich in organic matter and nutrients</p>
                 </div>
-                <div className="text-lg font-black text-slate-800">{selectedPlot.moisture}%</div>
+                <div className={`absolute right-[-10px] bottom-[-10px] w-20 h-20 rounded-full opacity-20 blur-2xl ${soilColors[selectedPlot.soilType]}`}></div>
               </div>
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-2 mb-1">
-                  <Activity size={14} className="text-emerald-500" />
-                  <span className="text-[10px] font-black uppercase text-slate-400">Health</span>
+              <div className="p-5 bg-emerald-50 rounded-[2rem] border border-emerald-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Droplets size={14} className="text-blue-500" />
+                  <span className="text-[10px] font-black uppercase text-slate-400">Moisture Profile</span>
                 </div>
-                <div className="text-lg font-black text-slate-800">{selectedPlot.health}%</div>
+                <div className="text-2xl font-black text-slate-800">{selectedPlot.moisture}%</div>
+                <div className="w-full bg-white h-1.5 rounded-full mt-3 overflow-hidden">
+                   <div className="bg-blue-500 h-full rounded-full transition-all duration-1000" style={{ width: `${selectedPlot.moisture}%` }}></div>
+                </div>
               </div>
             </div>
           </div>
@@ -141,11 +207,11 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
             </h3>
             
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => fetchResources("Soil Testing Lab")} className="p-4 bg-blue-50 text-blue-700 rounded-2xl text-xs font-bold hover:bg-blue-100 transition-all flex flex-col items-center gap-2">
-                <Microscope size={20} /> Soil Labs
+              <button onClick={() => fetchResources("Soil Testing Lab")} className="p-4 bg-blue-50 text-blue-700 rounded-2xl text-xs font-bold hover:bg-blue-100 transition-all flex flex-col items-center gap-2 group">
+                <Microscope size={20} className="group-hover:scale-110 transition-transform" /> Soil Labs
               </button>
-              <button onClick={() => fetchResources("Fertilizer Wholesale Store")} className="p-4 bg-orange-50 text-orange-700 rounded-2xl text-xs font-bold hover:bg-orange-100 transition-all flex flex-col items-center gap-2">
-                <Sprout size={20} /> Fertilizers
+              <button onClick={() => fetchResources("Fertilizer Wholesale Store")} className="p-4 bg-orange-50 text-orange-700 rounded-2xl text-xs font-bold hover:bg-orange-100 transition-all flex flex-col items-center gap-2 group">
+                <Sprout size={20} className="group-hover:scale-110 transition-transform" /> Fertilizers
               </button>
             </div>
 
@@ -189,10 +255,12 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
                 </div>
               </div>
 
-              <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden mb-6 flex">
-                <div className="bg-red-500 h-full w-[30%]" />
-                <div className="bg-yellow-500 h-full w-[40%]" />
-                <div className="bg-emerald-500 h-full w-[30%]" />
+              <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden mb-6 relative">
+                <div className="flex h-full w-full">
+                  <div className="bg-red-500 h-full w-[30%]" />
+                  <div className="bg-yellow-500 h-full w-[40%]" />
+                  <div className="bg-emerald-500 h-full w-[30%]" />
+                </div>
                 <div className="absolute h-6 w-1 bg-white top-[-6px] rounded-full shadow-lg transition-all duration-1000" style={{ left: `${selectedPlot.ndvi * 100}%` }} />
               </div>
 
@@ -224,9 +292,10 @@ const FarmFlow: React.FC<{ language: string }> = ({ language }) => {
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-6">
               {Object.entries(selectedPlot.npk).map(([key, val]) => (
-                <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">{key}</div>
-                  <div className="text-lg font-black text-slate-800">{Math.round(val)}%</div>
+                <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative overflow-hidden group">
+                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1 relative z-10">{key}</div>
+                  <div className="text-lg font-black text-slate-800 relative z-10">{Math.round(val)}%</div>
+                  <div className="absolute bottom-0 left-0 h-1 bg-orange-400/20 w-full transition-all group-hover:h-full group-hover:bg-orange-400/5" style={{ height: `${val}%` }}></div>
                 </div>
               ))}
             </div>
