@@ -4,25 +4,36 @@ export enum AppView {
   PRICE_WATCHER = 'PRICE_WATCHER',
   FARM_FLOW = 'FARM_FLOW',
   BUYERS_CONNECT = 'BUYERS_CONNECT',
+  PROFILE = 'PROFILE',
   TECH_STACK = 'TECH_STACK',
   IMPLEMENTATION = 'IMPLEMENTATION'
 }
 
 export type Language = 'en' | 'hi' | 'mr' | 'pa';
 
+export interface UserProfile {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  state: string;
+  district: string;
+  farm_size_acres: number;
+  soil_type: string;
+  preferred_crop: string;
+}
+
+export interface NPKReading {
+  n: number;
+  p: number;
+  k: number;
+  timestamp: string;
+}
+
 export interface CropPrice {
   crop: string;
   currentPrice: number;
   trend: 'up' | 'down' | 'stable';
   change: string;
-}
-
-export interface SensorData {
-  moisture: number;
-  temperature: number;
-  humidity: number;
-  npk: { n: number; p: number; k: number };
-  timestamp: string;
 }
 
 export interface BuyerListing {

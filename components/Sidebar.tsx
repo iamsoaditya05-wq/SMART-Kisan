@@ -7,7 +7,8 @@ import {
   ShoppingCart, 
   Cpu, 
   Workflow,
-  ShieldCheck
+  ShieldCheck,
+  User
 } from 'lucide-react';
 import { AppView, Language } from '../types';
 import { translations } from '../utils/translations';
@@ -26,6 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, language }) => 
     { id: AppView.PRICE_WATCHER, label: t.market, icon: TrendingUp },
     { id: AppView.FARM_FLOW, label: t.precision, icon: Droplets },
     { id: AppView.BUYERS_CONNECT, label: t.trade, icon: ShoppingCart },
+    { id: AppView.PROFILE, label: "My Profile", icon: User },
     { id: AppView.TECH_STACK, label: t.infrastructure, icon: Cpu },
     { id: AppView.IMPLEMENTATION, label: t.setup, icon: Workflow },
   ];
@@ -66,9 +68,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, language }) => 
             <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{t.status}</span>
           </div>
           <p className="text-xs font-semibold text-emerald-100">{t.online}</p>
-          <div className="mt-2 w-full bg-emerald-950 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-emerald-500 h-full w-[98%] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-          </div>
         </div>
       </div>
     </div>

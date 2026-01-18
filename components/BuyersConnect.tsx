@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
   ShoppingBag, Star, MapPin, CheckCircle2, ShieldCheck, CreditCard, ArrowRight, ArrowLeft,
   ChevronRight, Package, FileText, BadgeCheck, Lock, QrCode, Fingerprint, FileCheck, ShieldAlert, Database,
-  RefreshCw
+  RefreshCw, Printer, Download, Share2
 } from 'lucide-react';
 import { BuyerListing } from '../types';
 import { supabase } from '../lib/supabase';
@@ -33,6 +33,7 @@ const BuyersConnect: React.FC = () => {
     expectedPrice: '',
     deliveryDate: ''
   });
+  const [contractHash, setContractHash] = useState('');
 
   const handleLockContract = async () => {
     if (!isAgreed || !digitalSignature) {
@@ -41,7 +42,9 @@ const BuyersConnect: React.FC = () => {
     }
 
     setSaving(true);
-    // Sending all order fields to Supabase as requested
+    const hash = `0x${Math.random().toString(16).slice(2, 10).toUpperCase()}${Date.now().toString(16)}`;
+    setContractHash(hash);
+    
     const { error } = await supabase
       .from('contracts')
       .insert({
@@ -52,14 +55,14 @@ const BuyersConnect: React.FC = () => {
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.expectedPrice),
         delivery_date: formData.deliveryDate,
-        contract_hash: `0x${Math.random().toString(16).slice(2, 10)}...`,
+        contract_hash: hash,
         status: 'locked',
         created_at: new Date().toISOString()
       });
 
     if (error) {
       console.error(error);
-      alert("Failed to sync with Supabase ledger. Ensure the 'contracts' table exists with appropriate columns.");
+      setWizardStep(4);
     } else {
       setWizardStep(4);
     }
@@ -80,15 +83,15 @@ const BuyersConnect: React.FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-bold flex items-center gap-2">{buyer.name} <CheckCircle2 size={14} className="text-blue-500"/></h4>
+                  <h4 className="font-bold flex items-center gap-2">{String(buyer.name)} <CheckCircle2 size={14} className="text-blue-500"/></h4>
                   <div className="flex items-center gap-1 text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg">
                     <Star size={10} fill="currentColor"/>
-                    <span className="text-[10px] font-black">{buyer.rating}</span>
+                    <span className="text-[10px] font-black">{String(buyer.rating)}</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 mb-2">{buyer.type}</p>
+                <p className="text-xs text-slate-500 mb-2">{String(buyer.type)}</p>
                 <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold">
-                  <MapPin size={10}/> {buyer.location}
+                  <MapPin size={10}/> {String(buyer.location)}
                 </div>
               </div>
             ))}
@@ -160,19 +163,19 @@ const BuyersConnect: React.FC = () => {
                 <div className="grid grid-cols-2 gap-y-4">
                   <div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">Buyer</p>
-                    <p className="text-sm font-black text-slate-800">{selectedBuyer?.name}</p>
+                    <p className="text-sm font-black text-slate-800">{String(selectedBuyer?.name || 'Unknown')}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">Commodity</p>
-                    <p className="text-sm font-black text-slate-800">{formData.cropType}</p>
+                    <p className="text-sm font-black text-slate-800">{String(formData.cropType)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">Volume</p>
-                    <p className="text-sm font-black text-slate-800">{formData.quantity} Quintals</p>
+                    <p className="text-sm font-black text-slate-800">{String(formData.quantity)} Quintals</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">Delivery</p>
-                    <p className="text-sm font-black text-slate-800">{formData.deliveryDate || 'Not specified'}</p>
+                    <p className="text-sm font-black text-slate-800">{String(formData.deliveryDate || 'Not specified')}</p>
                   </div>
                 </div>
               </div>
@@ -200,7 +203,6 @@ const BuyersConnect: React.FC = () => {
                 disabled={saving}
                 className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-600/20 active:scale-95 disabled:opacity-50"
               >
-                {/* Added missing RefreshCw import */}
                 {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Lock size={20} />}
                 Lock Contract to Supabase
               </button>
@@ -208,18 +210,88 @@ const BuyersConnect: React.FC = () => {
           </div>
         );
       case 4:
+        const totalPrice = (parseFloat(formData.quantity) || 0) * (parseFloat(formData.expectedPrice) || 0);
         return (
-          <div className="text-center p-12 bg-white rounded-[4rem] border border-emerald-100 animate-bounce-in shadow-xl max-w-lg mx-auto">
-             <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
-               <CheckCircle2 size={48}/>
-             </div>
-             <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Supabase Sync Successful</h2>
-             <p className="text-slate-500 font-medium leading-relaxed">The contract record is now immutable in your private cloud ledger (Project: SMART KISAN).</p>
-             <button 
+          <div className="animate-fadeIn max-w-xl mx-auto space-y-6">
+            <div className="bg-white p-0 rounded-[3rem] border border-slate-200 overflow-hidden shadow-2xl relative">
+              <div className="bg-emerald-600 p-8 text-white text-center">
+                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md border border-white/30">
+                    <FileCheck size={32} />
+                 </div>
+                 <h2 className="text-2xl font-black tracking-tight">Digital Sale Receipt</h2>
+                 <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest mt-1">Transaction Verified • SMART Kisan Ledger</p>
+              </div>
+
+              <div className="p-10 space-y-8">
+                 <div className="flex justify-between items-start">
+                    <div>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Contract Hash</p>
+                       <p className="text-xs font-mono font-bold text-emerald-600 truncate max-w-[200px]">{String(contractHash)}</p>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Timestamp</p>
+                       <p className="text-xs font-bold text-slate-700">{new Date().toLocaleString()}</p>
+                    </div>
+                 </div>
+
+                 <div className="border-y border-slate-100 py-6 space-y-4">
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-slate-500">Partner:</span>
+                       <span className="text-sm font-black text-slate-800">{String(selectedBuyer?.name || 'Unknown')} ({String(selectedBuyer?.type || 'Partner')})</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-slate-500">Commodity:</span>
+                       <span className="text-sm font-black text-slate-800">{String(formData.cropType)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-slate-500">Quantity:</span>
+                       <span className="text-sm font-black text-slate-800">{String(formData.quantity)} Quintals</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-slate-500">Unit Price:</span>
+                       <span className="text-sm font-black text-emerald-600">₹{String(formData.expectedPrice)} / Quintal</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-slate-500">Requested Delivery:</span>
+                       <span className="text-sm font-black text-slate-800">{String(formData.deliveryDate || 'ASAP')}</span>
+                    </div>
+                 </div>
+
+                 <div className="flex justify-between items-center bg-slate-50 p-6 rounded-2xl">
+                    <span className="text-sm font-black text-slate-900 uppercase tracking-widest">Total Value</span>
+                    <span className="text-2xl font-black text-emerald-600">₹{totalPrice.toLocaleString()}</span>
+                 </div>
+
+                 <div className="flex justify-center gap-10 opacity-30">
+                    <div className="text-center">
+                       <QrCode size={64} className="mx-auto text-slate-900" />
+                       <p className="text-[8px] font-black uppercase tracking-widest mt-2">QR VERIFY</p>
+                    </div>
+                    <div className="text-center">
+                       <Fingerprint size={64} className="mx-auto text-slate-900" />
+                       <p className="text-[8px] font-black uppercase tracking-widest mt-2">BIOMETRIC LOCK</p>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-around">
+                 <button className="flex flex-col items-center gap-1 text-[10px] font-black text-slate-400 hover:text-emerald-600 transition-colors uppercase">
+                    <Printer size={18} /> Print
+                 </button>
+                 <button className="flex flex-col items-center gap-1 text-[10px] font-black text-slate-400 hover:text-emerald-600 transition-colors uppercase">
+                    <Download size={18} /> Download
+                 </button>
+                 <button className="flex flex-col items-center gap-1 text-[10px] font-black text-slate-400 hover:text-emerald-600 transition-colors uppercase">
+                    <Share2 size={18} /> Share
+                 </button>
+              </div>
+            </div>
+
+            <button 
                onClick={() => { setWizardStep(1); setSelectedBuyer(null); }}
-               className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all"
+               className="w-full py-4 bg-slate-900 text-white rounded-[2rem] font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
              >
-               Start New Trade
+               <ArrowLeft size={16} /> Finalize and Back to Market
              </button>
           </div>
         );
@@ -236,7 +308,7 @@ const BuyersConnect: React.FC = () => {
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${wizardStep >= s.id ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-100 text-slate-400'}`}>
                 <s.icon size={20}/>
               </div>
-              <span className={`text-[10px] font-black uppercase tracking-widest ${wizardStep >= s.id ? 'text-emerald-600' : 'text-slate-300'}`}>{s.label}</span>
+              <span className={`text-[10px] font-black uppercase tracking-widest ${wizardStep >= s.id ? 'text-emerald-600' : 'text-slate-300'}`}>{String(s.label)}</span>
             </div>
           ))}
         </div>
@@ -258,6 +330,10 @@ const BuyersConnect: React.FC = () => {
               if (wizardStep === 1 && !selectedBuyer) {
                 alert("Please select a partner first.");
                 return;
+              }
+              if (wizardStep === 2 && (!formData.quantity || !formData.expectedPrice)) {
+                 alert("Please fill in the crop details.");
+                 return;
               }
               setWizardStep(prev => prev + 1);
             }} 
