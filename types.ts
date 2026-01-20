@@ -20,13 +20,29 @@ export interface UserProfile {
   farm_size_acres: number;
   soil_type: string;
   preferred_crop: string;
+  reputation_points?: number;
 }
 
 export interface NPKReading {
   n: number;
   p: number;
   k: number;
+  ph: number;
+  moisture: number;
   timestamp: string;
+}
+
+export interface ResourceUsage {
+  water_liters: number;
+  fertilizer_kg: number;
+  timestamp: string;
+}
+
+export interface CropHealthAnalysis {
+  status: 'Healthy' | 'Stressed' | 'Diseased';
+  confidence: number;
+  details: string;
+  recommendations: string[];
 }
 
 export interface CropPrice {

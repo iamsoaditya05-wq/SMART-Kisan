@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Thermometer, Droplets, ShieldAlert, Zap, Activity, BrainCircuit, Sparkles, X, Info, Database, CloudSun, MapPin, ArrowRightLeft, RefreshCw, ExternalLink } from 'lucide-react';
+import { Thermometer, Droplets, ShieldAlert, Zap, Activity, BrainCircuit, Sparkles, X, Info, Database, CloudSun, MapPin, ArrowRightLeft, RefreshCw, ExternalLink, TrendingUp, BarChart, Gift, Sprout } from 'lucide-react';
 import { 
-  CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis
+  CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, BarChart as ReBarChart, Bar, Cell, Legend
 } from 'recharts';
 import { Language } from '../types';
 import { translations } from '../utils/translations';
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from '../lib/supabase';
-import { getWeatherFeedback, GroundingSource } from '../services/geminiService';
+import { getWeatherFeedback, GroundingSource, predictYieldOutcome } from '../services/geminiService';
 
 interface DashboardProps {
   language: Language;
@@ -22,8 +22,21 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
     plot_name: "Plot 01 (North)",
     moisture: 38.4,
     temperature: 24.8,
-    health: 94
+    health: 94,
+    ph: 6.5,
+    n: 45, p: 32, k: 68
   });
+
+  // New States for Yield and Resource tracking
+  const [yieldPrediction, setYieldPrediction] = useState<string | null>(null);
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [reputationScore, setReputationScore] = useState(850);
+  const [resourceHistory] = useState([
+    { name: 'Week 1', water: 400, fertilizer: 20 },
+    { name: 'Week 2', water: 300, fertilizer: 15 },
+    { name: 'Week 3', water: 500, fertilizer: 25 },
+    { name: 'Week 4', water: 450, fertilizer: 22 },
+  ]);
 
   // Weather Comparison State
   const [region1, setRegion1] = useState('Punjab');
@@ -34,8 +47,9 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
 
   useEffect(() => {
     fetchPlotData();
+    const cachedYield = localStorage.getItem('last_yield_prediction');
+    if (cachedYield) setYieldPrediction(cachedYield);
     
-    // Subscribe to real-time changes in the 'plots' table
     const channel = supabase
       .channel('plots_realtime')
       .on('postgres_changes', { event: '*', table: 'plots' }, (payload) => {
@@ -49,22 +63,33 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
   const fetchPlotData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        // Fallback to static mock data if no user is logged in
-        return;
+      if (user) {
+        const { data } = await supabase.from('plots').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (data) {
+          setPlotData(data);
+          localStorage.setItem('cached_plot_data', JSON.stringify(data));
+        }
       }
-
-      const { data, error } = await supabase
-        .from('plots')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (data) setPlotData(data);
     } catch (e) {
-      console.error("Supabase Plot Fetch Error:", e);
+      const cached = localStorage.getItem('cached_plot_data');
+      if (cached) setPlotData(JSON.parse(cached));
+    }
+  };
+
+  const handlePredictYield = async () => {
+    setIsPredicting(true);
+    try {
+      const result = await predictYieldOutcome(
+        plotData.n, plotData.p, plotData.k, plotData.moisture, plotData.ph,
+        "Wheat", "Loamy", "Ludhiana", language
+      );
+      setYieldPrediction(result);
+      localStorage.setItem('last_yield_prediction', result);
+      setReputationScore(prev => prev + 50); // Reward for using AI predictive features
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsPredicting(false);
     }
   };
 
@@ -85,17 +110,13 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
     setIsAnalyzing(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const statusStr = `Moisture ${plotData.moisture}%, Temperature ${plotData.temperature}°C, Health ${plotData.health}/100`;
-      const langName = language === 'hi' ? 'Hindi' : language === 'mr' ? 'Marathi' : language === 'pa' ? 'Punjabi' : 'English';
-      
+      const statusStr = `Moisture ${plotData.moisture}%, Temp ${plotData.temperature}°C, pH ${plotData.ph}, Health ${plotData.health}/100`;
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Provide an Explainable AI (XAI) summary for a farmer. Current field status: ${statusStr}. Explain the significance of these values. Language: ${langName}.`,
+        contents: `Explain the current farm state to a farmer: ${statusStr}. Provide human-readable reasoning for these values. Language: ${language}.`,
       });
-      
       setXaiInsight(response.text || "Insight generation failed.");
     } catch (e) {
-      console.error("XAI error:", e);
       setXaiInsight("Connection to AI Core lost.");
     } finally {
       setIsAnalyzing(false);
@@ -107,13 +128,23 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-2xl lg:text-3xl font-black text-slate-900">{t.overview}</h2>
-          <p className="text-slate-500 font-medium text-sm lg:text-base">{plotData ? `Monitoring ${plotData.plot_name}` : t.activePlots}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-slate-500 font-medium text-sm">{plotData ? `Monitoring ${plotData.plot_name}` : t.activePlots}</p>
+            <div className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <Gift size={12} />
+              <span className="text-[10px] font-black">{reputationScore} RP</span>
+            </div>
+          </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-           <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm">
-              <Database size={14} className="text-emerald-500" />
-              <span className="text-[10px] font-black text-slate-400 uppercase">Live Cloud Sync</span>
-           </div>
+           <button 
+             onClick={handlePredictYield}
+             disabled={isPredicting}
+             className="bg-emerald-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-all disabled:opacity-50 shadow-lg shadow-emerald-600/20"
+           >
+             {isPredicting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp size={16} />}
+             <span className="text-xs font-bold">Predict Yield</span>
+           </button>
            <button 
              onClick={getXAIExplanation}
              disabled={isAnalyzing}
@@ -128,8 +159,61 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         <StatCard icon={Droplets} label={t.moisture} value={`${plotData.moisture}%`} trend="+2.1%" unit={t.optimal} color="text-blue-600" bg="bg-blue-50" />
         <StatCard icon={Thermometer} label={t.temp} value={`${plotData.temperature}°C`} trend="-0.5%" unit={t.normal} color="text-orange-600" bg="bg-orange-50" />
-        <StatCard icon={Zap} label={t.energy} value="12.2 kWh" trend="Stable" unit={t.efficient} color="text-yellow-600" bg="bg-yellow-50" />
+        <StatCard icon={Activity} label="Soil pH Balance" value={plotData.ph} trend="Neutral" unit="Healthy" color="text-purple-600" bg="bg-purple-50" />
         <StatCard icon={Activity} label={t.health} value={`${plotData.health}/100`} trend="+4%" unit={t.excellent} color="text-emerald-600" bg="bg-emerald-50" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Yield Prediction Outcome */}
+        <div className="lg:col-span-2 bg-white p-6 lg:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[400px]">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600">
+              <Sprout size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Yield Outcome Predictor</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Feature 6: Predictive AI</p>
+            </div>
+          </div>
+          <div className="flex-1 bg-slate-50 rounded-[2rem] p-6 overflow-y-auto">
+            {yieldPrediction ? (
+               <div className="text-sm text-slate-700 leading-relaxed prose prose-emerald whitespace-pre-wrap">
+                 {yieldPrediction}
+               </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                <TrendingUp size={48} className="mb-4 opacity-20" />
+                <p className="font-bold text-xs uppercase tracking-widest">Run Prediction Engine</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Resource Tracking Chart */}
+        <div className="bg-white p-6 lg:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm min-h-[400px]">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
+              <BarChart size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Resource Tracking</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Feature 10: Usage Analytics</p>
+            </div>
+          </div>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ReBarChart data={resourceHistory}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                <YAxis hide />
+                <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                <Bar dataKey="water" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Water (L)" />
+                <Bar dataKey="fertilizer" fill="#10b981" radius={[4, 4, 0, 0]} name="Fertilizer (Kg)" />
+                <Legend iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}} />
+              </ReBarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {xaiInsight && (
@@ -166,7 +250,7 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
                 type="text" 
                 value={region1}
                 onChange={(e) => setRegion1(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all"
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
                 placeholder="Region A..."
               />
             </div>
@@ -186,7 +270,7 @@ const Dashboard: React.FC<DashboardProps> = ({ language }) => {
                 type="text" 
                 value={region2}
                 onChange={(e) => setRegion2(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all"
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
                 placeholder="Region B..."
               />
             </div>
