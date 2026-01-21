@@ -20,7 +20,18 @@ export interface UserProfile {
   farm_size_acres: number;
   soil_type: string;
   preferred_crop: string;
-  reputation_points?: number;
+  reputation_points: number;
+}
+
+export interface Task {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  points: number;
+  is_completed: boolean;
+  category: string;
+  created_at: string;
 }
 
 export interface NPKReading {

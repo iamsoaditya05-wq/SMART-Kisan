@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Droplets, Thermometer, FlaskConical, RefreshCw, Info, Sprout, Sparkles, Waves, Zap, BrainCircuit, Loader2, Gauge, CheckCircle2, ChevronRight, Beaker, Camera, Upload, BarChart3, PieChart, ShieldCheck, Globe, Key, ShieldAlert
+  Droplets, Thermometer, FlaskConical, RefreshCw, Info, Sprout, Sparkles, Waves, Zap, BrainCircuit, Loader2, Gauge, CheckCircle2, ChevronRight, Beaker, Camera, Upload, BarChart3, PieChart, ShieldCheck, Globe, Key, ShieldAlert, Binary
 } from 'lucide-react';
 import { getNpkFertilizerAdvice, detectSoilTypeFromImage, analyzeCropHealth } from '../services/geminiService';
 import { 
@@ -36,7 +35,7 @@ export default function FarmFlow({ language }: { language: string }) {
   useEffect(() => {
     fetchProfileAndData();
     const channel = supabase
-      .channel('npk_realtime')
+      .channel('npk_realtime_stream')
       .on('postgres_changes', { event: 'INSERT', table: 'npk_readings' }, (payload) => {
         const newReading = payload.new;
         setNpkHistory(prev => [...prev.slice(-9), {
@@ -44,7 +43,7 @@ export default function FarmFlow({ language }: { language: string }) {
           N: newReading.n_value,
           P: newReading.p_value,
           K: newReading.k_value,
-          pH: newReading.ph_value || 6.5
+          pH: newReading.ph_value || 6.8
         }]);
         setSelectedPlot(newReading);
       })
@@ -58,7 +57,8 @@ export default function FarmFlow({ language }: { language: string }) {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
       const localProfile = localStorage.getItem('guest_profile');
-      const baseProfile = localProfile ? JSON.parse(localProfile) : { preferred_crop: "Wheat", soil_type: "Loamy", district: "Ludhiana", state: "Punjab" };
+      // Set default regional benchmark to Bhopal, MP
+      const baseProfile = localProfile ? JSON.parse(localProfile) : { preferred_crop: "Soybean", soil_type: "Black Soil", district: "Bhopal", state: "Madhya Pradesh" };
 
       if (user) {
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
@@ -71,7 +71,7 @@ export default function FarmFlow({ language }: { language: string }) {
             N: r.n_value,
             P: r.p_value,
             K: r.k_value,
-            pH: r.ph_value || 6.5
+            pH: r.ph_value || 6.8
           })));
           setSelectedPlot(readings[readings.length - 1]);
         } else {
@@ -138,10 +138,10 @@ export default function FarmFlow({ language }: { language: string }) {
   const handleDeepNutrientAnalysis = async (detectedSoilType?: string, visionContext?: string) => {
     setIsAnalyzing(true);
     try {
-      const soilType = detectedSoilType || profile?.soil_type || "Loamy";
+      const soilType = detectedSoilType || profile?.soil_type || "Black Soil";
       const advice = await getNpkFertilizerAdvice(
         selectedPlot?.n_value || 0, selectedPlot?.p_value || 0, selectedPlot?.k_value || 0,
-        profile?.preferred_crop || "Wheat", soilType, "Ludhiana, India", language, visionContext
+        profile?.preferred_crop || "Soybean", soilType, "Bhopal, Madhya Pradesh", language, visionContext
       );
       setAiNutrientAdvice(String(advice || 'Analysis complete.'));
     } catch (e: any) {
@@ -170,20 +170,19 @@ export default function FarmFlow({ language }: { language: string }) {
         </div>
       )}
 
-      {/* Feature 11: Crop Health Vision Analysis */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
           <div>
             <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-              <Sprout className="text-emerald-500" /> Crop Health Vision AI
+              <Sprout className="text-emerald-500" /> Crop Pattern Vision AI
             </h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Feature 11: Health Detection</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time Anomaly Detection</p>
           </div>
           <button 
             onClick={() => cropInputRef.current?.click()}
-            className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg"
+            className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg hover:bg-emerald-600 transition-all"
           >
-            <Camera size={16} /> Analyze Leaf/Crop
+            <Camera size={16} /> Scan Field Patterns
           </button>
           <input type="file" ref={cropInputRef} className="hidden" accept="image/*" onChange={onCropImageChange} />
         </div>
@@ -193,7 +192,7 @@ export default function FarmFlow({ language }: { language: string }) {
              {cropImage ? (
                <img src={cropImage} alt="Crop" className="w-full h-full object-cover" />
              ) : (
-               <div className="text-center p-6"><Upload className="mx-auto text-slate-300 mb-2" size={40} /><p className="text-xs font-bold text-slate-400">Capture Leaf for Diagnosis</p></div>
+               <div className="text-center p-6"><Upload className="mx-auto text-slate-300 mb-2" size={40} /><p className="text-xs font-bold text-slate-400">Capture Crop Patterns</p></div>
              )}
              {isAnalyzingCrop && <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center"><Loader2 className="animate-spin text-white" size={40} /></div>}
           </div>
@@ -202,7 +201,10 @@ export default function FarmFlow({ language }: { language: string }) {
                <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 h-full">
                   <div className="flex justify-between items-center mb-4">
                     <span className="bg-emerald-600 text-white text-[10px] font-black px-3 py-1 rounded-full">{cropHealthResult.status}</span>
-                    <span className="text-emerald-600 font-black">{cropHealthResult.confidence_pct}% Match</span>
+                    <div className="flex items-center gap-2 text-emerald-600 font-black">
+                      <Binary size={16} />
+                      <span>{cropHealthResult.confidence_pct}% Confidence</span>
+                    </div>
                   </div>
                   <p className="text-sm text-slate-700 italic mb-6">"{cropHealthResult.analysis}"</p>
                   <div className="space-y-2">
@@ -214,18 +216,18 @@ export default function FarmFlow({ language }: { language: string }) {
                   </div>
                </div>
              ) : (
-               <div className="bg-slate-50 p-10 rounded-[2rem] border border-dashed border-slate-200 flex items-center justify-center text-center h-full">
-                 <ShieldAlert size={48} className="text-slate-200" />
+               <div className="bg-slate-50 p-10 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center h-full">
+                 <ShieldAlert size={48} className="text-slate-200 mb-2" />
+                 <p className="text-[10px] font-black text-slate-400 uppercase">Pattern Engine Standby</p>
                </div>
              )}
           </div>
         </div>
       </div>
 
-      {/* Soil Monitoring & Vision */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-          <div><h3 className="text-2xl font-black text-slate-900 flex items-center gap-2"><Camera className="text-emerald-500" /> Soil Composition AI</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Analysis & Web Grounded Data</p></div>
+          <div><h3 className="text-2xl font-black text-slate-900 flex items-center gap-2"><Camera className="text-emerald-500" /> Soil Vision Analysis</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Central India Benchmark Data</p></div>
           <button onClick={() => soilInputRef.current?.click()} className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg"><Camera size={16} /> Analyze Sample</button>
           <input type="file" ref={soilInputRef} className="hidden" accept="image/*" onChange={onSoilImageChange} />
         </div>
@@ -248,10 +250,9 @@ export default function FarmFlow({ language }: { language: string }) {
         </div>
       </div>
 
-      {/* Feature 1: Live Monitoring (NPK + pH) */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
         <div className="flex justify-between items-center mb-8">
-          <div><h3 className="text-2xl font-black text-slate-900">Soil Monitoring Stream</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Feature 1: Live Sensors (NPK + pH)</p></div>
+          <div><h3 className="text-2xl font-black text-slate-900">Soil Monitoring Stream</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time Sensor Pattern Tracking</p></div>
         </div>
         <div className="h-64 w-full min-h-[256px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -273,21 +274,21 @@ export default function FarmFlow({ language }: { language: string }) {
         <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden h-full min-h-[400px]">
           <div className="relative z-10 h-full flex flex-col">
             <h3 className="text-2xl font-black mb-2 flex items-center gap-2"><Sparkles className="text-emerald-400" /> AI Nutrient Strategist</h3>
-            <p className="text-slate-400 text-sm mb-8 font-medium">Web-Grounded Decision Engine</p>
+            <p className="text-slate-400 text-sm mb-8 font-medium">Bhopal Hub Decision Engine</p>
             <div className="grid grid-cols-3 gap-4 mb-8">
               <NPKStat label="N" val={selectedPlot?.n_value || 0} color="text-emerald-400" />
               <NPKStat label="P" val={selectedPlot?.p_value || 0} color="text-blue-400" />
-              <NPKStat label="pH" val={selectedPlot?.ph_value || 6.5} color="text-amber-400" />
+              <NPKStat label="pH" val={selectedPlot?.ph_value || 6.8} color="text-amber-400" />
             </div>
             <button onClick={() => handleDeepNutrientAnalysis(soilComposition?.type, soilComposition?.analysis)} disabled={isAnalyzing} className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all disabled:opacity-50 shadow-lg shadow-emerald-500/30 mt-auto">
-              {isAnalyzing ? <RefreshCw className="animate-spin" /> : <BrainCircuit />} {isAnalyzing ? "Analyzing..." : "Prescribe Solution"}
+              {isAnalyzing ? <RefreshCw className="animate-spin" /> : <BrainCircuit />} {isAnalyzing ? "Analyzing Regional Patterns..." : "Prescribe Solution"}
             </button>
           </div>
           <Waves className="absolute right-[-40px] bottom-[-40px] text-white/5 w-64 h-64" />
         </div>
         <div className="bg-white p-8 rounded-[3rem] border border-emerald-100 shadow-sm animate-fadeIn flex flex-col h-full min-h-[400px]">
           {aiNutrientAdvice ? (
-            <div className="flex flex-col h-full"><h4 className="text-xl font-black text-slate-900 mb-6">Prescription Plan</h4><div className="flex-1 overflow-y-auto pr-2 custom-scrollbar"><div className="text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">{aiNutrientAdvice}</div></div></div>
+            <div className="flex flex-col h-full"><h4 className="text-xl font-black text-slate-900 mb-6">Regional Prescription Plan</h4><div className="flex-1 overflow-y-auto pr-2 custom-scrollbar"><div className="text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">{aiNutrientAdvice}</div></div></div>
           ) : (
             <div className="bg-slate-50 p-10 rounded-[3rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center h-full"><FlaskConical size={32} className="text-slate-300 mb-6" /><h4 className="text-lg font-black text-slate-400 uppercase">Strategist Standby</h4></div>
           )}

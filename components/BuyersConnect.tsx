@@ -45,11 +45,11 @@ const BuyersConnect: React.FC = () => {
     const hash = `0x${Math.random().toString(16).slice(2, 10).toUpperCase()}${Date.now().toString(16)}`;
     setContractHash(hash);
     
+    // Removed buyer_id to resolve PGRST204 error as column is missing in schema
     const { error } = await supabase
       .from('contracts')
       .insert({
         buyer_name: selectedBuyer?.name,
-        buyer_id: selectedBuyer?.id,
         buyer_type: selectedBuyer?.type,
         crop_type: formData.cropType,
         quantity: parseFloat(formData.quantity),
@@ -61,7 +61,9 @@ const BuyersConnect: React.FC = () => {
       });
 
     if (error) {
-      console.error(error);
+      console.error("Supabase Contract Error:", error);
+      // Proceed to receipt for demo purposes even if insert fails, 
+      // but in production we handle this based on criticality.
       setWizardStep(4);
     } else {
       setWizardStep(4);

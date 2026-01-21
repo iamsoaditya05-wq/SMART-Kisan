@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { User, Phone, MapPin, Sprout, Save, LayoutGrid, Loader2, Key, ExternalLink, ShieldCheck } from 'lucide-react';
+import { User, Phone, MapPin, Sprout, Save, LayoutGrid, Loader2, Key, ExternalLink, ShieldCheck, Award, Zap, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { UserProfile } from '../types';
 
@@ -53,7 +52,8 @@ export default function Profile() {
             district: 'Ludhiana', 
             farm_size_acres: 12.5, 
             soil_type: 'Loamy', 
-            preferred_crop: 'Wheat' 
+            preferred_crop: 'Wheat',
+            reputation_points: 850
           });
         }
         setLoading(false);
@@ -79,7 +79,8 @@ export default function Profile() {
           district: '', 
           farm_size_acres: 0, 
           soil_type: '', 
-          preferred_crop: '' 
+          preferred_crop: '',
+          reputation_points: 0
         });
       }
     } catch (error) {
@@ -120,62 +121,87 @@ export default function Profile() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn pb-20">
-      <div className="p-6 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-emerald-100 p-4 rounded-2xl text-emerald-600">
-            <User size={32} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-slate-900">Farmer Profile</h2>
-            <p className="text-slate-500 text-sm font-medium">Digital Identity & Farm Details</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InputGroup label="Full Name" icon={User} value={profile?.full_name} onChange={(v: string) => setProfile(p => p ? {...p, full_name: v} : null)} />
-          <InputGroup label="Phone Number" icon={Phone} value={profile?.phone_number} onChange={(v: string) => setProfile(p => p ? {...p, phone_number: v} : null)} />
-          <InputGroup label="State" icon={MapPin} value={profile?.state} onChange={(v: string) => setProfile(p => p ? {...p, state: v} : null)} />
-          <InputGroup label="District" icon={MapPin} value={profile?.district} onChange={(v: string) => setProfile(p => p ? {...p, district: v} : null)} />
-          
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Farm Size (Acres)</label>
-            <div className="relative">
-              <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="number" 
-                value={profile?.farm_size_acres || 0} 
-                onChange={(e) => setProfile(p => p ? {...p, farm_size_acres: parseFloat(e.target.value) || 0} : null)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-emerald-100 outline-none" 
-              />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 p-8 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-emerald-100 p-4 rounded-2xl text-emerald-600">
+              <User size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900">Farmer Profile</h2>
+              <p className="text-slate-500 text-sm font-medium">Digital Identity & Farm Details</p>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Soil Type</label>
-            <select 
-              value={profile?.soil_type || ''} 
-              onChange={(e) => setProfile(p => p ? {...p, soil_type: e.target.value} : null)}
-              className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-emerald-100 outline-none appearance-none"
-            >
-              <option value="">Select Soil</option>
-              <option value="Loamy">Loamy</option>
-              <option value="Clayey">Clayey</option>
-              <option value="Sandy">Sandy</option>
-              <option value="Silty">Silty</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputGroup label="Full Name" icon={User} value={profile?.full_name} onChange={(v: string) => setProfile(p => p ? {...p, full_name: v} : null)} />
+            <InputGroup label="Phone Number" icon={Phone} value={profile?.phone_number} onChange={(v: string) => setProfile(p => p ? {...p, phone_number: v} : null)} />
+            <InputGroup label="State" icon={MapPin} value={profile?.state} onChange={(v: string) => setProfile(p => p ? {...p, state: v} : null)} />
+            <InputGroup label="District" icon={MapPin} value={profile?.district} onChange={(v: string) => setProfile(p => p ? {...p, district: v} : null)} />
+            
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Farm Size (Acres)</label>
+              <div className="relative">
+                <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="number" 
+                  value={profile?.farm_size_acres || 0} 
+                  onChange={(e) => setProfile(p => p ? {...p, farm_size_acres: parseFloat(e.target.value) || 0} : null)}
+                  className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-emerald-100 outline-none" 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Soil Type</label>
+              <select 
+                value={profile?.soil_type || ''} 
+                onChange={(e) => setProfile(p => p ? {...p, soil_type: e.target.value} : null)}
+                className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-emerald-100 outline-none appearance-none"
+              >
+                <option value="">Select Soil</option>
+                <option value="Loamy">Loamy</option>
+                <option value="Clayey">Clayey</option>
+                <option value="Sandy">Sandy</option>
+                <option value="Silty">Silty</option>
+              </select>
+            </div>
+
+            <InputGroup label="Preferred Crop" icon={Sprout} value={profile?.preferred_crop} onChange={(v: string) => setProfile(p => p ? {...p, preferred_crop: v} : null)} />
           </div>
 
-          <InputGroup label="Preferred Crop" icon={Sprout} value={profile?.preferred_crop} onChange={(v: string) => setProfile(p => p ? {...p, preferred_crop: v} : null)} />
+          <button 
+            onClick={updateProfile}
+            disabled={saving}
+            className="mt-10 w-full py-5 bg-emerald-600 text-white rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            Sync Profile Data
+          </button>
         </div>
 
-        <button 
-          onClick={updateProfile}
-          disabled={saving}
-          className="mt-10 w-full py-5 bg-emerald-600 text-white rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-          Sync Profile Data
-        </button>
+        <div className="space-y-6">
+          <div className="p-8 bg-emerald-600 rounded-[2.5rem] text-white shadow-xl shadow-emerald-600/20 flex flex-col items-center text-center">
+             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 border border-white/30 backdrop-blur-md">
+                <Award size={32} />
+             </div>
+             <h3 className="text-xl font-black mb-1">Reputation Score</h3>
+             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100 mb-6">Reinforcement Level 4</p>
+             <div className="text-4xl font-black mb-2">{profile?.reputation_points || 0}</div>
+             <p className="text-[10px] font-bold text-emerald-200">Earned through RL Optimizations</p>
+          </div>
+
+          <div className="p-8 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                <TrendingUp size={14} className="text-emerald-500" /> Skill Progress
+             </h4>
+             <div className="space-y-4">
+                <SkillBar label="Irrigation Efficiency" progress={75} color="bg-blue-500" />
+                <SkillBar label="Soil Nutrition" progress={42} color="bg-emerald-500" />
+                <SkillBar label="Market Awareness" progress={90} color="bg-orange-500" />
+             </div>
+          </div>
+        </div>
       </div>
 
       <div className="p-8 bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl overflow-hidden relative group">
@@ -215,6 +241,18 @@ export default function Profile() {
     </div>
   );
 }
+
+const SkillBar = ({ label, progress, color }: any) => (
+  <div className="space-y-1.5">
+    <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
+       <span className="text-slate-500">{label}</span>
+       <span className="text-slate-900">{progress}%</span>
+    </div>
+    <div className="h-2 bg-slate-50 rounded-full overflow-hidden">
+       <div className={`h-full ${color} transition-all duration-1000`} style={{width: `${progress}%`}}></div>
+    </div>
+  </div>
+);
 
 const BotIcon = ({ className, size }: any) => (
   <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
